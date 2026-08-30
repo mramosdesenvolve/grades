@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+  @page multi-grid {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  @page report {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+  body {
+    background: white !important;
+  }
+  .print-multi-grid {
+    page: multi-grid;
+  }
+  .print-report {
+    page: report;
+  }
+  .print-page-break {
+    break-after: page;
+  }
+  .print-grid-item {
+    break-inside: avoid;
+    margin-bottom: 8mm;
+  }
+}
