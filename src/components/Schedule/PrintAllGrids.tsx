@@ -71,6 +71,8 @@ function ClassGridBlock({ classGroup }: { classGroup: ClassGroup }) {
   )
 }
 
+const GRIDS_PER_PAGE = 3
+
 export function PrintAllGrids({ schoolId }: { schoolId: string }) {
   const { data } = useApp()
   const schoolName = data.schools.find((s) => s.id === schoolId)?.name ?? ''
@@ -79,8 +81,8 @@ export function PrintAllGrids({ schoolId }: { schoolId: string }) {
   return (
     <div className="print-multi-grid">
       {classes.map((c, i) => (
-        <div key={c.id} className={i % 2 === 1 ? 'print-page-break' : ''}>
-          {i % 2 === 0 && (
+        <div key={c.id} className={i % GRIDS_PER_PAGE === GRIDS_PER_PAGE - 1 ? 'print-page-break' : ''}>
+          {i % GRIDS_PER_PAGE === 0 && (
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Grade de Horários — {schoolName}
             </p>

@@ -8,3 +8,5 @@ dist
 backups/
 *.xlsx
 ~$*
+.claude/*.lock
+.vercel

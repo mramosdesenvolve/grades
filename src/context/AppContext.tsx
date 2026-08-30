@@ -160,6 +160,29 @@ const entryToDb = (e: Omit<ScheduleEntry, 'id' | 'schoolId'>, schoolId: string) 
   teacher_id: e.teacherId,
 })
 
+// O Supabase (PostgREST) limita a 1000 linhas por requisição por padrão.
+// Com várias unidades, schedule_entries já passa disso — pagina até esgotar.
+const PAGE_SIZE = 1000
+async function fetchAllRows<T>(table: string): Promise<T[]> {
+  const rows: T[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) {
+      console.error(`Erro ao buscar ${table}:`, error)
+      break
+    }
+    if (!data || data.length === 0) break
+    rows.push(...data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return rows
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [data, setData] = useState<AppData>(emptyData)
@@ -172,19 +195,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const refetchAll = useCallback(async () => {
-    const [schoolsRes, componentsRes, teachersRes, classesRes, scheduleRes, accessRes] =
+    const [schoolsRes, componentsRes, teachersRows, classesRows, scheduleRows, accessRes] =
       await Promise.all([
         supabase.from('schools').select('*'),
         supabase.from('components').select('*'),
-        supabase.from('teachers').select('*'),
-        supabase.from('classes').select('*'),
-        supabase.from('schedule_entries').select('*'),
+        fetchAllRows<DbTeacher>('teachers'),
+        fetchAllRows<DbClass>('classes'),
+        fetchAllRows<DbEntry>('schedule_entries'),
         supabase.from('school_access').select('school_id'),
       ])
 
-    const errors = [schoolsRes, componentsRes, teachersRes, classesRes, scheduleRes, accessRes]
-      .map((r) => r.error)
-      .filter(Boolean)
+    const errors = [schoolsRes.error, componentsRes.error, accessRes.error].filter(Boolean)
     if (errors.length > 0) {
       console.error('Erro ao buscar dados do Supabase:', errors)
     }
@@ -192,9 +213,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setData({
       schools: (schoolsRes.data ?? []).map((s) => ({ id: s.id, name: s.name })),
       components: (componentsRes.data ?? []).map(compFromDb),
-      teachers: (teachersRes.data ?? []).map(teacherFromDb),
-      classes: (classesRes.data ?? []).map(classFromDb),
-      schedule: (scheduleRes.data ?? []).map(entryFromDb),
+      teachers: teachersRows.map(teacherFromDb),
+      classes: classesRows.map(classFromDb),
+      schedule: scheduleRows.map(entryFromDb),
     })
     setAccessibleSchoolIds((accessRes.data ?? []).map((a) => a.school_id))
     setLastSavedAt(Date.now())

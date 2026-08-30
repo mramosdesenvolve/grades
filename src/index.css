@@ -39,6 +39,6 @@ body {
   }
   .print-grid-item {
     break-inside: avoid;
-    margin-bottom: 8mm;
+    margin-bottom: 6mm;
   }
 }
