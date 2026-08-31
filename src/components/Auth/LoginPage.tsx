@@ -2,9 +2,30 @@ import { useState } from 'react'
 import { CalendarDays, LogIn } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
+// unidades com login pelo nome (sem e-mail) — o app traduz para o e-mail
+// sintético interno correspondente antes de autenticar
+const UNIT_IDS = ['capsula', 'barra-da-tijuca', 'niteroi', 'politecnico']
+
+function normalize(s: string) {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '-')
+}
+
+function resolveLoginIdentifier(input: string): string {
+  const trimmed = input.trim()
+  if (trimmed.includes('@')) return trimmed // e-mail normal (ex: administrador)
+  const normalized = normalize(trimmed)
+  if (UNIT_IDS.includes(normalized)) return `${normalized}@unidade.login`
+  return trimmed
+}
+
 export function LoginPage() {
   const { signIn } = useAuth()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -13,9 +34,9 @@ export function LoginPage() {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const { error: signInError } = await signIn(email.trim(), password)
+    const { error: signInError } = await signIn(resolveLoginIdentifier(username), password)
     setLoading(false)
-    if (signInError) setError('E-mail ou senha inválidos.')
+    if (signInError) setError('Unidade/e-mail ou senha inválidos.')
   }
 
   return (
@@ -35,12 +56,13 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">E-mail</label>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Unidade</label>
             <input
-              type="email"
+              type="text"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="ex: capsula, barra-da-tijuca, niteroi, politecnico"
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               autoFocus
             />
