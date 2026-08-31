@@ -11,7 +11,11 @@ import {
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from './AuthContext'
 import { useLocalStorage } from '../hooks/useLocalStorage'
-import { findTeacherConflicts } from '../utils/conflicts'
+import {
+  findTeacherConflicts,
+  findDailyOverloadEntries,
+  findLunchBreakViolations,
+} from '../utils/conflicts'
 import type {
   AppData,
   ClassGroup,
@@ -23,6 +27,10 @@ import type {
 interface AppContextValue {
   data: AppData
   conflicts: Set<string>
+  /** mais de 8 tempos (regência + planejamento) no mesmo dia para o professor */
+  dailyOverloadEntries: Set<string>
+  /** professor ocupado ao mesmo tempo no último tempo da manhã e no primeiro da tarde (sem almoço) */
+  lunchBreakViolations: Set<string>
   activeSchoolId: string
   setActiveSchoolId: (id: string) => void
   accessibleSchoolIds: string[]
@@ -323,10 +331,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [data.schedule, activeSchoolId],
   )
   const conflicts = useMemo(() => findTeacherConflicts(schoolSchedule), [schoolSchedule])
+  const dailyOverloadEntries = useMemo(() => findDailyOverloadEntries(schoolSchedule), [schoolSchedule])
+  const lunchBreakViolations = useMemo(() => findLunchBreakViolations(schoolSchedule), [schoolSchedule])
 
   const value: AppContextValue = {
     data,
     conflicts,
+    dailyOverloadEntries,
+    lunchBreakViolations,
     activeSchoolId,
     setActiveSchoolId: setActiveSchoolIdRaw,
     accessibleSchoolIds,

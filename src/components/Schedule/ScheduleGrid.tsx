@@ -17,7 +17,30 @@ export function ScheduleGrid({
   week: WeekType
   shiftFilter?: Shift
 }) {
-  const { data, conflicts, upsertScheduleEntry, beginBatch, commitBatch } = useApp()
+  const {
+    data,
+    conflicts,
+    dailyOverloadEntries,
+    lunchBreakViolations,
+    upsertScheduleEntry,
+    beginBatch,
+    commitBatch,
+  } = useApp()
+
+  // conflito (mesmo professor em 2 lugares) tem prioridade visual sobre um
+  // alerta trabalhista (excesso diário / sem almoço) — os dois nunca
+  // precisam de estilos simultâneos na mesma célula.
+  const alertLevelFor = (id: string): 'conflict' | 'labor' | null => {
+    if (conflicts.has(id)) return 'conflict'
+    if (dailyOverloadEntries.has(id) || lunchBreakViolations.has(id)) return 'labor'
+    return null
+  }
+  const laborAlertReason = (id: string) => {
+    const reasons: string[] = []
+    if (dailyOverloadEntries.has(id)) reasons.push('mais de 8 tempos neste dia (limite do sindicato)')
+    if (lunchBreakViolations.has(id)) reasons.push('sem intervalo de almoço entre manhã e tarde')
+    return reasons.join(' · ')
+  }
   const [target, setTarget] = useState<{
     day: Weekday
     timeSlotId: string
@@ -155,13 +178,14 @@ export function ScheduleGrid({
                         <td key={day} className="p-1.5 align-top">
                           <div className="flex h-16 w-full flex-col overflow-hidden rounded-lg border border-transparent print:h-auto print:min-h-[3rem]">
                             {[entryA, entryB].map((entry) => {
-                              const isConflict = conflicts.has(entry.id)
+                              const alertLevel = alertLevelFor(entry.id)
                               const component = entryDisplay(entry)
                               const dropKey = `${day}::${slot.id}::${entry.week}`
                               return (
                                 <button
                                   key={entry.id}
                                   draggable
+                                  title={alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined}
                                   onDragStart={() => setDraggingId(entry.id)}
                                   onDragEnd={() => {
                                     setDraggingId(null)
@@ -187,9 +211,13 @@ export function ScheduleGrid({
                                     })
                                   }
                                   className={`flex h-1/2 w-full cursor-grab flex-col justify-center px-2 py-0.5 text-left transition-colors first:border-b first:border-white hover:opacity-90 active:cursor-grabbing ${
-                                    isConflict ? 'border-red-400 bg-red-50' : ''
+                                    alertLevel === 'conflict'
+                                      ? 'border-red-400 bg-red-50'
+                                      : alertLevel === 'labor'
+                                        ? 'border-amber-400 bg-amber-50'
+                                        : ''
                                   } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
-                                  style={!isConflict ? { backgroundColor: `${component?.color}1a` } : undefined}
+                                  style={!alertLevel ? { backgroundColor: `${component?.color}1a` } : undefined}
                                 >
                                   <span className="flex items-baseline gap-1">
                                     <span
@@ -199,7 +227,14 @@ export function ScheduleGrid({
                                     </span>
                                     <span
                                       className="truncate text-[11px] font-semibold"
-                                      style={{ color: isConflict ? '#dc2626' : component?.color }}
+                                      style={{
+                                        color:
+                                          alertLevel === 'conflict'
+                                            ? '#dc2626'
+                                            : alertLevel === 'labor'
+                                              ? '#d97706'
+                                              : component?.color,
+                                      }}
                                     >
                                       {component?.name}
                                     </span>
@@ -241,12 +276,13 @@ export function ScheduleGrid({
                                 const dropKey = `${day}::${slot.id}::${w}`
                                 if (half.kind === 'planning') {
                                   const pe = half.e
-                                  const isConflict = conflicts.has(pe.id)
+                                  const alertLevel = alertLevelFor(pe.id)
                                   const component = entryDisplay(pe)
                                   return (
                                     <button
                                       key={w}
                                       draggable
+                                      title={alertLevel === 'labor' ? laborAlertReason(pe.id) : undefined}
                                       onDragStart={() => setDraggingId(pe.id)}
                                       onDragEnd={() => {
                                         setDraggingId(null)
@@ -272,10 +308,14 @@ export function ScheduleGrid({
                                         })
                                       }
                                       className={`flex h-1/2 w-full cursor-grab items-baseline gap-1 overflow-hidden px-2 py-0.5 text-left transition-colors first:border-b first:border-white hover:opacity-90 active:cursor-grabbing ${
-                                        isConflict ? 'border-red-400 bg-red-50' : ''
+                                        alertLevel === 'conflict'
+                                          ? 'border-red-400 bg-red-50'
+                                          : alertLevel === 'labor'
+                                            ? 'border-amber-400 bg-amber-50'
+                                            : ''
                                       } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
                                       style={
-                                        !isConflict
+                                        !alertLevel
                                           ? { backgroundColor: `${component?.color}1a` }
                                           : undefined
                                       }
@@ -285,7 +325,14 @@ export function ScheduleGrid({
                                       </span>
                                       <span
                                         className="truncate text-[11px] font-semibold"
-                                        style={{ color: isConflict ? '#dc2626' : component?.color }}
+                                        style={{
+                                          color:
+                                            alertLevel === 'conflict'
+                                              ? '#dc2626'
+                                              : alertLevel === 'labor'
+                                                ? '#d97706'
+                                                : component?.color,
+                                        }}
                                       >
                                         {component?.name}
                                       </span>
@@ -363,7 +410,7 @@ export function ScheduleGrid({
                       }
                     }
 
-                    const isConflict = entry ? conflicts.has(entry.id) : false
+                    const alertLevel = entry ? alertLevelFor(entry.id) : null
                     const component = entry ? entryDisplay(entry) : undefined
                     const label = entry ? entryLabel(entry) : undefined
                     const dropKey = `${day}::${slot.id}`
@@ -373,6 +420,9 @@ export function ScheduleGrid({
                       <td key={day} className="p-1.5 align-top">
                         <button
                           draggable={!!entry}
+                          title={
+                            entry && alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined
+                          }
                           onDragStart={() => entry && setDraggingId(entry.id)}
                           onDragEnd={() => {
                             setDraggingId(null)
@@ -400,15 +450,17 @@ export function ScheduleGrid({
                             entry ? 'cursor-grab active:cursor-grabbing' : ''
                           } ${
                             entry
-                              ? isConflict
+                              ? alertLevel === 'conflict'
                                 ? 'border-red-400 bg-red-50 hover:bg-red-100'
-                                : 'border-transparent hover:opacity-90'
+                                : alertLevel === 'labor'
+                                  ? 'border-amber-400 bg-amber-50 hover:bg-amber-100'
+                                  : 'border-transparent hover:opacity-90'
                               : regenciaRef.length > 0
                                 ? 'border-dashed border-slate-300 bg-slate-50 hover:border-brand-300'
                                 : 'border-dashed border-slate-200 hover:border-brand-300 hover:bg-brand-50/50'
                           } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
                           style={
-                            entry && !isConflict
+                            entry && !alertLevel
                               ? { backgroundColor: `${component?.color}1a` }
                               : undefined
                           }
@@ -417,7 +469,14 @@ export function ScheduleGrid({
                             <>
                               <span
                                 className="truncate text-xs font-semibold"
-                                style={{ color: isConflict ? '#dc2626' : component?.color }}
+                                style={{
+                                  color:
+                                    alertLevel === 'conflict'
+                                      ? '#dc2626'
+                                      : alertLevel === 'labor'
+                                        ? '#d97706'
+                                        : component?.color,
+                                }}
                               >
                                 {component?.name}
                               </span>

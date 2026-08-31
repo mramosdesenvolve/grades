@@ -20,7 +20,8 @@ type ViewMode = 'class' | 'teacher' | 'planning'
 type BulkPrintTarget = 'grids' | 'report' | null
 
 export function SchedulePage() {
-  const { data, activeSchoolId, conflicts, replaceAllData } = useApp()
+  const { data, activeSchoolId, conflicts, dailyOverloadEntries, lunchBreakViolations, replaceAllData } =
+    useApp()
   const [viewMode, setViewMode] = useState<ViewMode>('class')
   const [entityId, setEntityId] = useState('')
   const [week, setWeek] = useState<WeekType>('A')
@@ -60,6 +61,18 @@ export function SchedulePage() {
       (e) => conflicts.has(e.id) && e[entityKind as 'classId' | 'teacherId'] === entityId,
     ).length
   }, [data.schedule, conflicts, entityId, entityKind])
+
+  // alertas trabalhistas (excesso diário / sem almoço) são regras por
+  // professor — só fazem sentido nas visões "Professor · Regência" e
+  // "Professor · Planejamento"
+  const laborAlertCount = useMemo(() => {
+    if (!entityId || viewMode === 'class') return 0
+    return data.schedule.filter(
+      (e) =>
+        (dailyOverloadEntries.has(e.id) || lunchBreakViolations.has(e.id)) &&
+        e.teacherId === entityId,
+    ).length
+  }, [data.schedule, dailyOverloadEntries, lunchBreakViolations, entityId, viewMode])
 
   const entityName = entities.find((e) => e.id === entityId)?.name ?? ''
 
@@ -191,6 +204,12 @@ export function SchedulePage() {
         {conflictCount > 0 && (
           <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600">
             <AlertTriangle size={14} /> {conflictCount} conflito(s) de professor
+          </span>
+        )}
+
+        {laborAlertCount > 0 && (
+          <span className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+            <AlertTriangle size={14} /> {laborAlertCount} alerta(s) trabalhista(s) (sindicato)
           </span>
         )}
       </div>
