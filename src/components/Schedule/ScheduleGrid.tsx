@@ -17,7 +17,7 @@ export function ScheduleGrid({
   week: WeekType
   shiftFilter?: Shift
 }) {
-  const { data, conflicts, upsertScheduleEntry } = useApp()
+  const { data, conflicts, upsertScheduleEntry, beginBatch, commitBatch } = useApp()
   const [target, setTarget] = useState<{
     day: Weekday
     timeSlotId: string
@@ -29,7 +29,7 @@ export function ScheduleGrid({
 
   const slots = shiftFilter ? TIME_SLOTS.filter((s) => s.shift === shiftFilter) : TIME_SLOTS
 
-  const handleDrop = (day: Weekday, timeSlotId: string, targetEntry: ScheduleEntry | null) => {
+  const handleDrop = async (day: Weekday, timeSlotId: string, targetEntry: ScheduleEntry | null) => {
     setDragOverKey(null)
     if (!draggingId) return
     const sourceId = draggingId
@@ -39,18 +39,22 @@ export function ScheduleGrid({
     if (source.day === day && source.timeSlotId === timeSlotId) return
     if (targetEntry && targetEntry.id === source.id) return
 
+    beginBatch()
+
     const { id: sourceEntryId, schoolId: _s1, ...sourceRest } = source
-    upsertScheduleEntry({ ...sourceRest, id: sourceEntryId, day, timeSlotId })
+    await upsertScheduleEntry({ ...sourceRest, id: sourceEntryId, day, timeSlotId })
 
     if (targetEntry) {
       const { id: targetEntryId, schoolId: _s2, ...targetRest } = targetEntry
-      upsertScheduleEntry({
+      await upsertScheduleEntry({
         ...targetRest,
         id: targetEntryId,
         day: source.day,
         timeSlotId: source.timeSlotId,
       })
     }
+
+    commitBatch(targetEntry ? 'Trocar aulas de lugar' : 'Mover aula')
   }
 
   const findEntries = (day: Weekday, timeSlotId: string) =>

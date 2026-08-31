@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -41,10 +42,20 @@ interface AppContextValue {
   updateComponent: (id: string, c: Omit<CurricularComponent, 'id'>, teacherIds: string[]) => void
   deleteComponent: (id: string) => void
 
-  upsertScheduleEntry: (entry: Omit<ScheduleEntry, 'id' | 'schoolId'> & { id?: string }) => void
+  upsertScheduleEntry: (
+    entry: Omit<ScheduleEntry, 'id' | 'schoolId'> & { id?: string },
+  ) => Promise<void>
   removeScheduleEntry: (id: string) => void
 
   replaceAllData: (data: AppData) => void
+
+  /** desfazer a última ação (professor/turma/componente/aula) */
+  undo: () => void
+  canUndo: boolean
+  undoLabel: string | null
+  /** agrupa várias mutações (ex: troca de 2 aulas ao arrastar) em 1 único "desfazer" */
+  beginBatch: () => void
+  commitBatch: (label: string) => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -183,6 +194,19 @@ async function fetchAllRows<T>(table: string): Promise<T[]> {
   return rows
 }
 
+// ---------------------------------------------------------------------------
+// desfazer (undo): cada mutação bem-sucedida empilha um "passo inverso" que
+// refaz a chamada oposta direto no Supabase (sem passar pelos mutators
+// públicos, para não empilhar undo de um undo). Fica só na memória da aba —
+// não é persistido, não é o mesmo que o backup/ponto de retorno completo.
+// ---------------------------------------------------------------------------
+type UndoStep = () => Promise<void>
+interface UndoEntry {
+  label: string
+  steps: UndoStep[]
+}
+const MAX_UNDO = 30
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [data, setData] = useState<AppData>(emptyData)
@@ -193,6 +217,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     'grades-active-school',
     '',
   )
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([])
+  const batchRef = useRef<UndoStep[] | null>(null)
 
   const refetchAll = useCallback(async () => {
     const [schoolsRes, componentsRes, teachersRows, classesRows, scheduleRows, accessRes] =
@@ -233,6 +259,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refetchAll()
   }, [user, refetchAll])
 
+  // registra o passo inverso de uma mutação bem-sucedida; se estiver dentro
+  // de um beginBatch()/commitBatch(), acumula no lote em vez de empilhar
+  // como uma ação isolada
+  const finishMutation = useCallback(
+    (label: string, step: UndoStep) => {
+      if (batchRef.current) {
+        batchRef.current.push(step)
+        return
+      }
+      setUndoStack((prev) => [...prev.slice(-(MAX_UNDO - 1)), { label, steps: [step] }])
+      refetchAll()
+    },
+    [refetchAll],
+  )
+
+  const beginBatch = useCallback(() => {
+    batchRef.current = []
+  }, [])
+
+  const commitBatch = useCallback(
+    (label: string) => {
+      const steps = batchRef.current ?? []
+      batchRef.current = null
+      if (steps.length > 0) {
+        setUndoStack((prev) => [...prev.slice(-(MAX_UNDO - 1)), { label, steps }])
+      }
+      refetchAll()
+    },
+    [refetchAll],
+  )
+
+  const undo = useCallback(() => {
+    setUndoStack((prev) => {
+      const entry = prev[prev.length - 1]
+      if (!entry) return prev
+      ;(async () => {
+        for (const step of [...entry.steps].reverse()) {
+          try {
+            await step()
+          } catch (err) {
+            console.error('Erro ao desfazer:', err)
+          }
+        }
+        refetchAll()
+      })()
+      return prev.slice(0, -1)
+    })
+  }, [refetchAll])
+
   // garante que a unidade ativa é sempre uma que o usuário pode acessar
   useEffect(() => {
     if (loading) return
@@ -265,9 +340,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       supabase
         .from('teachers')
         .insert(teacherToDb(t, activeSchoolId))
-        .then(({ error }) => {
-          if (error) console.error(error)
-          refetchAll()
+        .select()
+        .single()
+        .then(({ data: inserted, error }) => {
+          if (error || !inserted) {
+            console.error(error)
+            refetchAll()
+            return
+          }
+          finishMutation(`Adicionar professor "${t.name}"`, async () => {
+            await supabase.from('teachers').delete().eq('id', inserted.id)
+          })
         })
     },
     updateTeacher: (id, t) => {
@@ -278,18 +361,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .update(teacherToDb(t, current.schoolId))
         .eq('id', id)
         .then(({ error }) => {
-          if (error) console.error(error)
-          refetchAll()
+          if (error) {
+            console.error(error)
+            refetchAll()
+            return
+          }
+          finishMutation(`Editar professor "${current.name}"`, async () => {
+            await supabase.from('teachers').update(teacherToDb(current, current.schoolId)).eq('id', id)
+          })
         })
     },
     deleteTeacher: (id) => {
+      const current = data.teachers.find((x) => x.id === id)
       supabase
         .from('teachers')
         .delete()
         .eq('id', id)
         .then(({ error }) => {
-          if (error) console.error(error)
-          refetchAll()
+          if (error) {
+            console.error(error)
+            refetchAll()
+            return
+          }
+          if (!current) {
+            refetchAll()
+            return
+          }
+          finishMutation(`Excluir professor "${current.name}"`, async () => {
+            await supabase.from('teachers').insert({ id: current.id, ...teacherToDb(current, current.schoolId) })
+          })
         })
     },
 
@@ -297,9 +397,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       supabase
         .from('classes')
         .insert(classToDb(c, activeSchoolId))
-        .then(({ error }) => {
-          if (error) console.error(error)
-          refetchAll()
+        .select()
+        .single()
+        .then(({ data: inserted, error }) => {
+          if (error || !inserted) {
+            console.error(error)
+            refetchAll()
+            return
+          }
+          finishMutation(`Adicionar turma "${c.name}"`, async () => {
+            await supabase.from('classes').delete().eq('id', inserted.id)
+          })
         })
     },
     updateClass: (id, c) => {
@@ -310,18 +418,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .update(classToDb(c, current.schoolId))
         .eq('id', id)
         .then(({ error }) => {
-          if (error) console.error(error)
-          refetchAll()
+          if (error) {
+            console.error(error)
+            refetchAll()
+            return
+          }
+          finishMutation(`Editar turma "${current.name}"`, async () => {
+            await supabase.from('classes').update(classToDb(current, current.schoolId)).eq('id', id)
+          })
         })
     },
     deleteClass: (id) => {
+      const current = data.classes.find((x) => x.id === id)
       supabase
         .from('classes')
         .delete()
         .eq('id', id)
         .then(({ error }) => {
-          if (error) console.error(error)
-          refetchAll()
+          if (error) {
+            console.error(error)
+            refetchAll()
+            return
+          }
+          if (!current) {
+            refetchAll()
+            return
+          }
+          finishMutation(`Excluir turma "${current.name}"`, async () => {
+            await supabase.from('classes').insert({ id: current.id, ...classToDb(current, current.schoolId) })
+          })
         })
     },
 
@@ -333,21 +458,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .single()
       if (error || !inserted) {
         console.error(error)
+        refetchAll()
         return
       }
+      const affected = teacherIds
+        .map((tid) => data.teachers.find((x) => x.id === tid))
+        .filter((t): t is Teacher => Boolean(t))
       await Promise.all(
-        teacherIds.map((tid) => {
-          const t = data.teachers.find((x) => x.id === tid)
-          if (!t) return null
-          return supabase
-            .from('teachers')
-            .update({ component_ids: [...t.componentIds, inserted.id] })
-            .eq('id', tid)
-        }),
+        affected.map((t) =>
+          supabase.from('teachers').update({ component_ids: [...t.componentIds, inserted.id] }).eq('id', t.id),
+        ),
       )
-      refetchAll()
+      finishMutation(`Adicionar componente "${c.name}"`, async () => {
+        await Promise.all(
+          affected.map((t) => supabase.from('teachers').update({ component_ids: t.componentIds }).eq('id', t.id)),
+        )
+        await supabase.from('components').delete().eq('id', inserted.id)
+      })
     },
     updateComponent: async (id, c, teacherIds) => {
+      const prevComponent = data.components.find((x) => x.id === id)
+      const teachersBefore = data.teachers.map((t) => ({ id: t.id, componentIds: t.componentIds }))
       const { error } = await supabase.from('components').update(compToDb(c)).eq('id', id)
       if (error) console.error(error)
       await Promise.all(
@@ -361,55 +492,96 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return supabase.from('teachers').update({ component_ids: nextIds }).eq('id', t.id)
         }),
       )
-      refetchAll()
+      if (!prevComponent) {
+        refetchAll()
+        return
+      }
+      finishMutation(`Editar componente "${prevComponent.name}"`, async () => {
+        await supabase.from('components').update(compToDb(prevComponent)).eq('id', id)
+        await Promise.all(
+          teachersBefore.map((t) =>
+            supabase.from('teachers').update({ component_ids: t.componentIds }).eq('id', t.id),
+          ),
+        )
+      })
     },
     deleteComponent: async (id) => {
+      const prevComponent = data.components.find((x) => x.id === id)
+      const affected = data.teachers.filter((t) => t.componentIds.includes(id))
       await Promise.all(
-        data.teachers
-          .filter((t) => t.componentIds.includes(id))
-          .map((t) =>
-            supabase
-              .from('teachers')
-              .update({ component_ids: t.componentIds.filter((cid) => cid !== id) })
-              .eq('id', t.id),
-          ),
+        affected.map((t) =>
+          supabase
+            .from('teachers')
+            .update({ component_ids: t.componentIds.filter((cid) => cid !== id) })
+            .eq('id', t.id),
+        ),
       )
       const { error } = await supabase.from('components').delete().eq('id', id)
       if (error) console.error(error)
-      refetchAll()
+      if (!prevComponent) {
+        refetchAll()
+        return
+      }
+      finishMutation(`Excluir componente "${prevComponent.name}"`, async () => {
+        await supabase.from('components').insert({ id: prevComponent.id, ...compToDb(prevComponent) })
+        await Promise.all(
+          affected.map((t) => supabase.from('teachers').update({ component_ids: t.componentIds }).eq('id', t.id)),
+        )
+      })
     },
 
-    upsertScheduleEntry: (entry) => {
+    upsertScheduleEntry: async (entry) => {
       if (entry.id) {
         const id = entry.id
         const current = data.schedule.find((e) => e.id === id)
         if (!current) return
-        supabase
+        const { error } = await supabase
           .from('schedule_entries')
           .update(entryToDb(entry, current.schoolId))
           .eq('id', id)
-          .then(({ error }) => {
-            if (error) console.error(error)
-            refetchAll()
-          })
+        if (error) {
+          console.error(error)
+          refetchAll()
+          return
+        }
+        finishMutation('Editar aula', async () => {
+          await supabase.from('schedule_entries').update(entryToDb(current, current.schoolId)).eq('id', id)
+        })
       } else {
-        supabase
+        const { data: inserted, error } = await supabase
           .from('schedule_entries')
           .insert(entryToDb(entry, activeSchoolId))
-          .then(({ error }) => {
-            if (error) console.error(error)
-            refetchAll()
-          })
+          .select()
+          .single()
+        if (error || !inserted) {
+          console.error(error)
+          refetchAll()
+          return
+        }
+        finishMutation('Adicionar aula', async () => {
+          await supabase.from('schedule_entries').delete().eq('id', inserted.id)
+        })
       }
     },
     removeScheduleEntry: (id) => {
+      const current = data.schedule.find((e) => e.id === id)
       supabase
         .from('schedule_entries')
         .delete()
         .eq('id', id)
         .then(({ error }) => {
-          if (error) console.error(error)
-          refetchAll()
+          if (error) {
+            console.error(error)
+            refetchAll()
+            return
+          }
+          if (!current) {
+            refetchAll()
+            return
+          }
+          finishMutation('Remover aula', async () => {
+            await supabase.from('schedule_entries').insert({ id: current.id, ...entryToDb(current, current.schoolId) })
+          })
         })
     },
 
@@ -455,8 +627,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      setUndoStack([])
       refetchAll()
     },
+
+    undo,
+    canUndo: undoStack.length > 0,
+    undoLabel: undoStack.length > 0 ? undoStack[undoStack.length - 1].label : null,
+    beginBatch,
+    commitBatch,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

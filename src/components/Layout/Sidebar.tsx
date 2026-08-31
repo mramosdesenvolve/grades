@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Building2,
   CalendarDays,
@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   LogOut,
   RefreshCw,
+  Undo2,
   Users,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -22,8 +23,17 @@ const items: { id: Page; label: string; icon: typeof CalendarDays }[] = [
 ]
 
 export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) {
-  const { data, activeSchoolId, setActiveSchoolId, accessibleSchoolIds, lastSavedAt, saveNow } =
-    useApp()
+  const {
+    data,
+    activeSchoolId,
+    setActiveSchoolId,
+    accessibleSchoolIds,
+    lastSavedAt,
+    saveNow,
+    undo,
+    canUndo,
+    undoLabel,
+  } = useApp()
   const { user, signOut } = useAuth()
   const [justSaved, setJustSaved] = useState(false)
 
@@ -32,6 +42,21 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
     setJustSaved(true)
     setTimeout(() => setJustSaved(false), 1500)
   }
+
+  // atalho Ctrl+Z / Cmd+Z para desfazer a última ação
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isUndoShortcut = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z'
+      if (!isUndoShortcut) return
+      const target = e.target as HTMLElement | null
+      const isTyping = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+      if (isTyping) return
+      e.preventDefault()
+      undo()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [undo])
 
   const savedLabel = new Date(lastSavedAt).toLocaleTimeString('pt-BR', {
     hour: '2-digit',
@@ -88,6 +113,15 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
       </nav>
 
       <div className="border-t border-slate-100 p-3">
+        <button
+          onClick={() => undo()}
+          disabled={!canUndo}
+          title={undoLabel ? `Desfazer: ${undoLabel}` : 'Nada para desfazer'}
+          className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+        >
+          <Undo2 size={15} className="shrink-0" />
+          <span className="truncate">Desfazer{undoLabel ? `: ${undoLabel}` : ''}</span>
+        </button>
         <button
           onClick={handleSave}
           className={`flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
