@@ -1,3 +1,4 @@
+import { TIME_SLOTS } from '../data/seed'
 import type { ScheduleEntry, WeekType } from '../types'
 
 /** Duas semanas "colidem" se forem iguais ou se uma delas for AMBAS. */
@@ -96,6 +97,59 @@ export function findLunchBreakViolations(schedule: ScheduleEntry[]): Set<string>
     }
   }
   return violations
+}
+
+/**
+ * Chave usada em findGapSlots: identifica um horário (turno) vago
+ * específico de um professor. Usada para marcar CÉLULAS VAZIAS (não há
+ * ScheduleEntry para um horário vago), então não dá pra usar um id de
+ * entrada como nas outras checagens.
+ */
+export function gapSlotKey(teacherId: string, day: string, timeSlotId: string, week: 'A' | 'B'): string {
+  return `${teacherId}::${day}::${timeSlotId}::${week}`
+}
+
+/**
+ * Regra do sindicato: a partir do momento em que o professor começa a
+ * trabalhar num turno (primeiro tempo ocupado, seja regência, planejamento
+ * ou orientação), ele não pode ter horário vago até o último tempo ocupado
+ * daquele turno. O intervalo de almoço (entre o turno da manhã e da tarde)
+ * não conta como "vago" aqui — isso já é tratado por findLunchBreakViolations.
+ */
+export function findGapSlots(schedule: ScheduleEntry[]): Set<string> {
+  const gaps = new Set<string>()
+  const byTeacherDay = new Map<string, ScheduleEntry[]>()
+  for (const e of schedule) {
+    const key = `${e.teacherId}::${e.day}`
+    const list = byTeacherDay.get(key)
+    if (list) list.push(e)
+    else byTeacherDay.set(key, [e])
+  }
+  const shifts = ['Matutino', 'Vespertino'] as const
+
+  for (const [key, entries] of byTeacherDay.entries()) {
+    const [teacherId, day] = key.split('::')
+    for (const week of ['A', 'B'] as const) {
+      const weekEntries = entries.filter((e) => e.week === week || e.week === 'AMBAS')
+      for (const shift of shifts) {
+        const shiftSlots = TIME_SLOTS.filter((s) => s.shift === shift)
+        const occupiedOrders = new Set(
+          shiftSlots
+            .filter((s) => weekEntries.some((e) => e.timeSlotId === s.id))
+            .map((s) => s.order),
+        )
+        if (occupiedOrders.size === 0) continue
+        const min = Math.min(...occupiedOrders)
+        const max = Math.max(...occupiedOrders)
+        for (const slot of shiftSlots) {
+          if (slot.order > min && slot.order < max && !occupiedOrders.has(slot.order)) {
+            gaps.add(gapSlotKey(teacherId, day, slot.id, week))
+          }
+        }
+      }
+    }
+  }
+  return gaps
 }
 
 /**

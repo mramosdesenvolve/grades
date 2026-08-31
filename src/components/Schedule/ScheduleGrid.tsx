@@ -1,9 +1,10 @@
 import { Fragment, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, AlertTriangle } from 'lucide-react'
 import { TIME_SLOTS } from '../../data/seed'
 import { WEEKDAYS } from '../../types'
 import type { Shift, WeekType, Weekday, ScheduleEntry } from '../../types'
 import { useApp } from '../../context/AppContext'
+import { gapSlotKey } from '../../utils/conflicts'
 import { AssignModal } from './AssignModal'
 
 export function ScheduleGrid({
@@ -22,6 +23,7 @@ export function ScheduleGrid({
     conflicts,
     dailyOverloadEntries,
     lunchBreakViolations,
+    gapSlots,
     upsertScheduleEntry,
     beginBatch,
     commitBatch,
@@ -35,6 +37,12 @@ export function ScheduleGrid({
     if (dailyOverloadEntries.has(id) || lunchBreakViolations.has(id)) return 'labor'
     return null
   }
+  // célula VAZIA (sem entrada) que representa um horário vago no meio do
+  // turno de trabalho do professor — só faz sentido nas visões por professor
+  const isGapCell = (day: Weekday, timeSlotId: string) =>
+    mode !== 'class' &&
+    (gapSlots.has(gapSlotKey(entityId, day, timeSlotId, 'A')) ||
+      gapSlots.has(gapSlotKey(entityId, day, timeSlotId, 'B')))
   const laborAlertReason = (id: string) => {
     const reasons: string[] = []
     if (dailyOverloadEntries.has(id)) reasons.push('mais de 8 tempos neste dia (limite do sindicato)')
@@ -415,13 +423,18 @@ export function ScheduleGrid({
                     const label = entry ? entryLabel(entry) : undefined
                     const dropKey = `${day}::${slot.id}`
                     const regenciaRef = entry ? [] : findRegenciaRef(day, slot.id)
+                    const isGap = !entry && regenciaRef.length === 0 && isGapCell(day, slot.id)
 
                     return (
                       <td key={day} className="p-1.5 align-top">
                         <button
                           draggable={!!entry}
                           title={
-                            entry && alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined
+                            entry && alertLevel === 'labor'
+                              ? laborAlertReason(entry.id)
+                              : isGap
+                                ? 'Horário vago entre dois compromissos deste professor no mesmo turno (limite do sindicato)'
+                                : undefined
                           }
                           onDragStart={() => entry && setDraggingId(entry.id)}
                           onDragEnd={() => {
@@ -455,9 +468,11 @@ export function ScheduleGrid({
                                 : alertLevel === 'labor'
                                   ? 'border-amber-400 bg-amber-50 hover:bg-amber-100'
                                   : 'border-transparent hover:opacity-90'
-                              : regenciaRef.length > 0
-                                ? 'border-dashed border-slate-300 bg-slate-50 hover:border-brand-300'
-                                : 'border-dashed border-slate-200 hover:border-brand-300 hover:bg-brand-50/50'
+                              : isGap
+                                ? 'border-dashed border-amber-400 bg-amber-50 hover:bg-amber-100'
+                                : regenciaRef.length > 0
+                                  ? 'border-dashed border-slate-300 bg-slate-50 hover:border-brand-300'
+                                  : 'border-dashed border-slate-200 hover:border-brand-300 hover:bg-brand-50/50'
                           } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
                           style={
                             entry && !alertLevel
@@ -507,6 +522,10 @@ export function ScheduleGrid({
                                 )
                               })}
                             </div>
+                          ) : isGap ? (
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600">
+                              <AlertTriangle size={12} /> Vago
+                            </span>
                           ) : (
                             <Plus
                               size={14}

@@ -20,8 +20,15 @@ type ViewMode = 'class' | 'teacher' | 'planning'
 type BulkPrintTarget = 'grids' | 'report' | null
 
 export function SchedulePage() {
-  const { data, activeSchoolId, conflicts, dailyOverloadEntries, lunchBreakViolations, replaceAllData } =
-    useApp()
+  const {
+    data,
+    activeSchoolId,
+    conflicts,
+    dailyOverloadEntries,
+    lunchBreakViolations,
+    gapSlots,
+    replaceAllData,
+  } = useApp()
   const [viewMode, setViewMode] = useState<ViewMode>('class')
   const [entityId, setEntityId] = useState('')
   const [week, setWeek] = useState<WeekType>('A')
@@ -73,6 +80,15 @@ export function SchedulePage() {
         e.teacherId === entityId,
     ).length
   }, [data.schedule, dailyOverloadEntries, lunchBreakViolations, entityId, viewMode])
+
+  // tempos vagos entre dois compromissos do professor no mesmo turno
+  const gapAlertCount = useMemo(() => {
+    if (!entityId || viewMode === 'class') return 0
+    const prefix = `${entityId}::`
+    let count = 0
+    for (const key of gapSlots) if (key.startsWith(prefix)) count++
+    return count
+  }, [gapSlots, entityId, viewMode])
 
   const entityName = entities.find((e) => e.id === entityId)?.name ?? ''
 
@@ -210,6 +226,12 @@ export function SchedulePage() {
         {laborAlertCount > 0 && (
           <span className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
             <AlertTriangle size={14} /> {laborAlertCount} alerta(s) trabalhista(s) (sindicato)
+          </span>
+        )}
+
+        {gapAlertCount > 0 && (
+          <span className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+            <AlertTriangle size={14} /> {gapAlertCount} horário(s) vago(s) no turno
           </span>
         )}
       </div>

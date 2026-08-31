@@ -15,6 +15,7 @@ import {
   findTeacherConflicts,
   findDailyOverloadEntries,
   findLunchBreakViolations,
+  findGapSlots,
 } from '../utils/conflicts'
 import type {
   AppData,
@@ -31,6 +32,8 @@ interface AppContextValue {
   dailyOverloadEntries: Set<string>
   /** professor ocupado ao mesmo tempo no último tempo da manhã e no primeiro da tarde (sem almoço) */
   lunchBreakViolations: Set<string>
+  /** horários vagos entre o primeiro e o último tempo ocupado do professor naquele turno (chaves via gapSlotKey) */
+  gapSlots: Set<string>
   activeSchoolId: string
   setActiveSchoolId: (id: string) => void
   accessibleSchoolIds: string[]
@@ -333,12 +336,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const conflicts = useMemo(() => findTeacherConflicts(schoolSchedule), [schoolSchedule])
   const dailyOverloadEntries = useMemo(() => findDailyOverloadEntries(schoolSchedule), [schoolSchedule])
   const lunchBreakViolations = useMemo(() => findLunchBreakViolations(schoolSchedule), [schoolSchedule])
+  const gapSlots = useMemo(() => findGapSlots(schoolSchedule), [schoolSchedule])
 
   const value: AppContextValue = {
     data,
     conflicts,
     dailyOverloadEntries,
     lunchBreakViolations,
+    gapSlots,
     activeSchoolId,
     setActiveSchoolId: setActiveSchoolIdRaw,
     accessibleSchoolIds,
