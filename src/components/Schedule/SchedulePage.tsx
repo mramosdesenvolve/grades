@@ -11,12 +11,13 @@ import {
 import { useApp } from '../../context/AppContext'
 import type { WeekType } from '../../types'
 import { ScheduleGrid } from './ScheduleGrid'
+import { ComponentGrid } from './ComponentGrid'
 import { PrintAllGrids } from './PrintAllGrids'
 import { PrintTeacherReport } from './PrintTeacherReport'
 import { exportScheduleCsv } from '../../utils/csv'
 import { downloadJson, readJsonFile } from '../../utils/backup'
 
-type ViewMode = 'class' | 'teacher' | 'planning'
+type ViewMode = 'class' | 'teacher' | 'planning' | 'component'
 type BulkPrintTarget = 'grids' | 'report' | null
 
 export function SchedulePage() {
@@ -36,8 +37,23 @@ export function SchedulePage() {
 
   const schoolClasses = data.classes.filter((c) => c.schoolId === activeSchoolId)
   const schoolTeachers = data.teachers.filter((t) => t.schoolId === activeSchoolId)
-  const entities = viewMode === 'class' ? schoolClasses : schoolTeachers
-  const entityKind = viewMode === 'class' ? 'classId' : 'teacherId'
+  // componentes com pelo menos 1 aula lançada nesta unidade (evita listar
+  // componentes de outras unidades, já que components é uma tabela global)
+  const schoolComponents = useMemo(() => {
+    const ids = new Set(
+      data.schedule
+        .filter((e) => e.schoolId === activeSchoolId && e.type === 'aula' && e.componentId)
+        .map((e) => e.componentId as string),
+    )
+    return data.components
+      .filter((c) => ids.has(c.id))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  }, [data.schedule, data.components, activeSchoolId])
+
+  const entities =
+    viewMode === 'class' ? schoolClasses : viewMode === 'component' ? schoolComponents : schoolTeachers
+  const entityKind =
+    viewMode === 'class' ? 'classId' : viewMode === 'component' ? 'componentId' : 'teacherId'
 
   useEffect(() => {
     if (entities.length > 0 && !entities.find((e) => e.id === entityId)) {
@@ -45,7 +61,7 @@ export function SchedulePage() {
     }
     if (entities.length === 0) setEntityId('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, activeSchoolId, data.classes, data.teachers])
+  }, [viewMode, activeSchoolId, data.classes, data.teachers, data.components])
 
   useEffect(() => {
     if (!bulkPrint) return
@@ -65,7 +81,9 @@ export function SchedulePage() {
   const conflictCount = useMemo(() => {
     if (!entityId) return 0
     return data.schedule.filter(
-      (e) => conflicts.has(e.id) && e[entityKind as 'classId' | 'teacherId'] === entityId,
+      (e) =>
+        conflicts.has(e.id) &&
+        e[entityKind as 'classId' | 'teacherId' | 'componentId'] === entityId,
     ).length
   }, [data.schedule, conflicts, entityId, entityKind])
 
@@ -73,7 +91,7 @@ export function SchedulePage() {
   // professor — só fazem sentido nas visões "Professor · Regência" e
   // "Professor · Planejamento"
   const laborAlertCount = useMemo(() => {
-    if (!entityId || viewMode === 'class') return 0
+    if (!entityId || viewMode === 'class' || viewMode === 'component') return 0
     return data.schedule.filter(
       (e) =>
         (dailyOverloadEntries.has(e.id) || lunchBreakViolations.has(e.id)) &&
@@ -83,7 +101,7 @@ export function SchedulePage() {
 
   // tempos vagos entre dois compromissos do professor no mesmo turno
   const gapAlertCount = useMemo(() => {
-    if (!entityId || viewMode === 'class') return 0
+    if (!entityId || viewMode === 'class' || viewMode === 'component') return 0
     const prefix = `${entityId}::`
     let count = 0
     for (const key of gapSlots) if (key.startsWith(prefix)) count++
@@ -93,7 +111,7 @@ export function SchedulePage() {
   const entityName = entities.find((e) => e.id === entityId)?.name ?? ''
 
   const handleExportCsv = () => {
-    if (!entityId) return
+    if (!entityId || viewMode === 'component') return
     exportScheduleCsv({
       schedule: data.schedule,
       components: data.components,
@@ -143,14 +161,16 @@ export function SchedulePage() {
           </button>
           <button
             onClick={handleExportCsv}
-            disabled={!entityId}
+            disabled={!entityId || viewMode === 'component'}
+            title={viewMode === 'component' ? 'Exportação CSV ainda não disponível para esta visão' : undefined}
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
             <Download size={15} /> CSV
           </button>
           <button
             onClick={() => window.print()}
-            disabled={!entityId}
+            disabled={!entityId || viewMode === 'component'}
+            title={viewMode === 'component' ? 'Impressão ainda não disponível para esta visão' : undefined}
             className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
           >
             <Printer size={15} /> Imprimir / PDF
@@ -177,7 +197,7 @@ export function SchedulePage() {
 
       <div className="mb-5 flex flex-wrap items-center gap-3 print:hidden">
         <div className="flex rounded-lg border border-slate-200 bg-white p-1">
-          {(['class', 'teacher', 'planning'] as ViewMode[]).map((m) => (
+          {(['class', 'teacher', 'planning', 'component'] as ViewMode[]).map((m) => (
             <button
               key={m}
               onClick={() => setViewMode(m)}
@@ -185,7 +205,13 @@ export function SchedulePage() {
                 viewMode === m ? 'bg-brand-600 text-white' : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
-              {m === 'class' ? 'Por Turma' : m === 'teacher' ? 'Professor · Regência' : 'Professor · Planejamento'}
+              {m === 'class'
+                ? 'Por Turma'
+                : m === 'teacher'
+                  ? 'Professor · Regência'
+                  : m === 'planning'
+                    ? 'Professor · Planejamento'
+                    : 'Por Componente'}
             </button>
           ))}
         </div>
@@ -245,16 +271,22 @@ export function SchedulePage() {
 
       {entityId ? (
         <div className={normalPrintClass}>
-          <ScheduleGrid
-            mode={viewMode}
-            entityId={entityId}
-            week={week}
-            shiftFilter={selectedClass?.shift}
-          />
+          {viewMode === 'component' ? (
+            <ComponentGrid componentId={entityId} week={week} />
+          ) : (
+            <ScheduleGrid
+              mode={viewMode}
+              entityId={entityId}
+              week={week}
+              shiftFilter={selectedClass?.shift}
+            />
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center text-sm text-slate-400">
-          Cadastre {viewMode === 'class' ? 'turmas' : 'professores'} para montar a grade.
+          Cadastre{' '}
+          {viewMode === 'class' ? 'turmas' : viewMode === 'component' ? 'componentes com aulas' : 'professores'}{' '}
+          para montar a grade.
         </div>
       )}
       {viewMode === 'planning' && data.teachers.find((t) => t.id === entityId)?.componentIds
