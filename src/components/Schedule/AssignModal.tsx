@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Trash2 } from 'lucide-react'
+import { AlertTriangle, Plus, Trash2, X } from 'lucide-react'
 import { Modal } from '../common/Modal'
 import { useApp } from '../../context/AppContext'
 import type { ScheduleEntry, WeekType, Weekday } from '../../types'
@@ -28,7 +28,8 @@ export function AssignModal({
    * da grade "Por Componente", onde a intenção é só trocar o professor */
   lockComponent?: boolean
 }) {
-  const { data, activeSchoolId, upsertScheduleEntry, removeScheduleEntry } = useApp()
+  const { data, activeSchoolId, upsertScheduleEntry, removeScheduleEntry, beginBatch, commitBatch } =
+    useApp()
   const schoolTeachers = data.teachers.filter((t) => t.schoolId === activeSchoolId)
   const schoolClasses = data.classes.filter((c) => c.schoolId === activeSchoolId)
   const slot = TIME_SLOTS.find((s) => s.id === timeSlotId)!
@@ -65,9 +66,10 @@ export function AssignModal({
 
   const resolvedTeacherId = mode === 'class' ? secondaryId : teacherId
 
+  const overlaps = (a: WeekType, b: WeekType) => a === b || a === 'AMBAS' || b === 'AMBAS'
+
   const wouldConflict = useMemo(() => {
     if (!resolvedTeacherId) return false
-    const overlaps = (a: WeekType, b: WeekType) => a === b || a === 'AMBAS' || b === 'AMBAS'
     return data.schedule.some(
       (e) =>
         e.id !== existing?.id &&
@@ -78,7 +80,35 @@ export function AssignModal({
     )
   }, [data.schedule, resolvedTeacherId, day, timeSlotId, entryWeek, existing])
 
-  const handleSave = () => {
+  // co-docência (só em "Por Turma"): outros professores já lançados neste
+  // mesmo horário/turma além do principal — ex: um de LET (técnico) e um
+  // de formação geral básica, juntos.
+  const siblingEntries = data.schedule.filter(
+    (e) =>
+      mode === 'class' &&
+      e.type === 'aula' &&
+      e.classId === entityId &&
+      e.day === day &&
+      e.timeSlotId === timeSlotId &&
+      e.id !== existing?.id,
+  )
+  const [addingCoTeacher, setAddingCoTeacher] = useState(false)
+  const [coTeacherId, setCoTeacherId] = useState('')
+
+  const usedTeacherIds = new Set([secondaryId, ...siblingEntries.map((e) => e.teacherId)])
+  const availableCoTeachers = availableSecondary.filter(
+    (t) => mode === 'class' && !usedTeacherIds.has(t.id),
+  )
+
+  const coTeacherWouldConflict = useMemo(() => {
+    if (!coTeacherId) return false
+    return data.schedule.some(
+      (e) => e.teacherId === coTeacherId && e.day === day && e.timeSlotId === timeSlotId && overlaps(e.week, entryWeek),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.schedule, coTeacherId, day, timeSlotId, entryWeek])
+
+  const handleSave = async () => {
     if (mode === 'planning') {
       if (canMarkOrientacao && planningKind === 'orientacao') {
         upsertScheduleEntry({
@@ -108,7 +138,11 @@ export function AssignModal({
     if (!componentId || !secondaryId) return
     const finalTeacherId = mode === 'class' ? secondaryId : entityId
     const classId = mode === 'class' ? entityId : secondaryId
-    upsertScheduleEntry({
+
+    const addCoTeacher = mode === 'class' && addingCoTeacher && !!coTeacherId
+    if (addCoTeacher) beginBatch()
+
+    await upsertScheduleEntry({
       id: existing?.id,
       type: 'aula',
       day,
@@ -118,6 +152,19 @@ export function AssignModal({
       componentId,
       teacherId: finalTeacherId,
     })
+
+    if (addCoTeacher) {
+      await upsertScheduleEntry({
+        type: 'aula',
+        day,
+        timeSlotId,
+        week: entryWeek,
+        classId,
+        componentId,
+        teacherId: coTeacherId,
+      })
+      commitBatch('Adicionar professor junto')
+    }
     onClose()
   }
 
@@ -229,6 +276,88 @@ export function AssignModal({
               Conflito: este professor já está ocupado (aula ou planejamento) neste
               dia/horário/semana.
             </span>
+          </div>
+        )}
+
+        {mode === 'class' && !isOrientacaoEntry && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Professor(es) junto (co-docência)
+            </label>
+            <div className="space-y-1.5">
+              {siblingEntries.map((sib) => {
+                const t = data.teachers.find((x) => x.id === sib.teacherId)
+                return (
+                  <div
+                    key={sib.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                  >
+                    <span className="text-slate-700">
+                      {t?.name}
+                      {sib.week !== 'AMBAS' && (
+                        <span className="ml-1.5 rounded bg-slate-200 px-1 text-[10px] font-medium text-slate-600">
+                          Semana {sib.week}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeScheduleEntry(sib.id)}
+                      className="text-slate-400 hover:text-red-600"
+                      title="Remover este professor deste horário"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                )
+              })}
+
+              {addingCoTeacher ? (
+                <div className="space-y-2 rounded-lg border border-slate-200 p-2">
+                  <select
+                    value={coTeacherId}
+                    onChange={(e) => setCoTeacherId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    autoFocus
+                  >
+                    <option value="">Selecione o segundo professor...</option>
+                    {availableCoTeachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  {coTeacherWouldConflict && (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      <span>Conflito: este professor já está ocupado neste dia/horário/semana.</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingCoTeacher(false)
+                      setCoTeacherId('')
+                    }}
+                    className="text-xs font-medium text-slate-400 hover:text-slate-600"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAddingCoTeacher(true)}
+                  disabled={!componentId}
+                  className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-500 hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus size={13} /> Adicionar professor junto
+                </button>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              Ex: um professor de LET (técnico) e um de formação geral básica no mesmo horário.
+            </p>
           </div>
         )}
       </div>
