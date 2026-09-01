@@ -272,7 +272,7 @@ export function SchedulePage() {
       {entityId ? (
         <div className={normalPrintClass}>
           {viewMode === 'component' ? (
-            <ComponentGrid componentId={entityId} week={week} />
+            <ComponentGrid componentId={entityId} week={week} schoolId={activeSchoolId} />
           ) : (
             <ScheduleGrid
               mode={viewMode}

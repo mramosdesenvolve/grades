@@ -1,9 +1,10 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { TIME_SLOTS } from '../../data/seed'
 import { WEEKDAYS } from '../../types'
 import type { Shift, WeekType, ScheduleEntry } from '../../types'
 import { useApp } from '../../context/AppContext'
+import { findTeacherConflicts } from '../../utils/conflicts'
 import { AssignModal } from './AssignModal'
 
 // paleta estável para distinguir professores diferentes cobrindo o mesmo
@@ -15,20 +16,41 @@ const TEACHER_PALETTE = [
 
 /**
  * Grade completa de UM componente curricular, somando todas as turmas e
- * todos os professores que o lecionam na unidade — útil quando o
- * componente é dividido entre vários professores (ex: Matemática por
- * trilha) e não existe uma única "grade do professor" que mostre tudo.
+ * todos os professores que o lecionam — útil quando o componente é
+ * dividido entre vários professores (ex: Matemática por trilha) e não
+ * existe uma única "grade do professor" que mostre tudo.
+ *
+ * Se `schoolId` for informado, mostra só aquela unidade (com clique para
+ * trocar o professor responsável). Se for omitido, mostra TODAS as
+ * unidades acessíveis somadas na mesma grade (somente leitura — trocar o
+ * professor exige um contexto de unidade única), com um selo de unidade em
+ * cada aula para diferenciar.
  */
-export function ComponentGrid({ componentId, week }: { componentId: string; week: WeekType }) {
-  const { data, conflicts, activeSchoolId } = useApp()
+export function ComponentGrid({
+  componentId,
+  week,
+  schoolId,
+  entryType = 'aula',
+}: {
+  componentId: string
+  week: WeekType
+  schoolId?: string
+  entryType?: 'aula' | 'planejamento'
+}) {
+  const { data, accessibleSchoolIds } = useApp()
   const [target, setTarget] = useState<ScheduleEntry | null>(null)
+  const editable = Boolean(schoolId)
 
   // components é uma tabela global (o mesmo id de "Matemática" é usado nas
-  // 4 unidades) — sem filtrar por schoolId aqui, a grade misturaria aulas
-  // de outras unidades.
+  // 4 unidades) — sem filtrar por escola, a grade misturaria unidades.
   const entries = data.schedule.filter(
-    (e) => e.componentId === componentId && e.type === 'aula' && e.schoolId === activeSchoolId,
+    (e) =>
+      e.componentId === componentId &&
+      e.type === entryType &&
+      (schoolId ? e.schoolId === schoolId : accessibleSchoolIds.includes(e.schoolId)),
   )
+
+  const conflicts = useMemo(() => findTeacherConflicts(entries), [entries])
 
   const teacherIds = Array.from(new Set(entries.map((e) => e.teacherId)))
   const colorForTeacher = (teacherId: string) =>
@@ -57,6 +79,7 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-100 px-4 py-2.5">
           {teacherIds.map((tid) => {
             const teacher = data.teachers.find((t) => t.id === tid)
+            const school = !schoolId ? data.schools.find((s) => s.id === teacher?.schoolId) : null
             return (
               <span key={tid} className="flex items-center gap-1.5 text-xs text-slate-600">
                 <span
@@ -64,6 +87,7 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
                   style={{ backgroundColor: colorForTeacher(tid) }}
                 />
                 {teacher?.name ?? '?'}
+                {school && <span className="text-slate-400">· {school.name}</span>}
               </span>
             )
           })}
@@ -115,21 +139,11 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
                             const isConflict = conflicts.has(entry.id)
                             const cls = data.classes.find((c) => c.id === entry.classId)
                             const teacher = data.teachers.find((t) => t.id === entry.teacherId)
-                            return (
-                              <button
-                                key={entry.id}
-                                type="button"
-                                onClick={() => setTarget(entry)}
-                                title="Clique para trocar o professor responsável"
-                                className={`flex items-baseline gap-1 rounded px-1.5 py-0.5 text-left transition-opacity hover:opacity-80 ${
-                                  isConflict ? 'border border-red-400 bg-red-50' : ''
-                                }`}
-                                style={
-                                  !isConflict
-                                    ? { backgroundColor: `${colorForTeacher(entry.teacherId)}1a` }
-                                    : undefined
-                                }
-                              >
+                            const school = !schoolId
+                              ? data.schools.find((s) => s.id === entry.schoolId)
+                              : null
+                            const content = (
+                              <>
                                 {isConflict && (
                                   <AlertTriangle size={11} className="mt-0.5 shrink-0 text-red-500" />
                                 )}
@@ -140,14 +154,38 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
                                 )}
                                 <span
                                   className="truncate text-[11px] font-semibold"
-                                  style={{ color: isConflict ? '#dc2626' : colorForTeacher(entry.teacherId) }}
+                                  style={{
+                                    color: isConflict ? '#dc2626' : colorForTeacher(entry.teacherId),
+                                  }}
                                 >
-                                  {cls?.name ?? '?'}
+                                  {school ? `${school.name} · ${cls?.name ?? '?'}` : cls?.name ?? '?'}
                                 </span>
                                 <span className="truncate text-[10px] text-slate-500">
                                   {teacher?.name}
                                 </span>
+                              </>
+                            )
+                            const sharedClassName = `flex items-baseline gap-1 rounded px-1.5 py-0.5 text-left ${
+                              isConflict ? 'border border-red-400 bg-red-50' : ''
+                            }`
+                            const sharedStyle = !isConflict
+                              ? { backgroundColor: `${colorForTeacher(entry.teacherId)}1a` }
+                              : undefined
+                            return editable ? (
+                              <button
+                                key={entry.id}
+                                type="button"
+                                onClick={() => setTarget(entry)}
+                                title="Clique para trocar o professor responsável"
+                                className={`${sharedClassName} transition-opacity hover:opacity-80`}
+                                style={sharedStyle}
+                              >
+                                {content}
                               </button>
+                            ) : (
+                              <div key={entry.id} className={sharedClassName} style={sharedStyle}>
+                                {content}
+                              </div>
                             )
                           })}
                         </div>
@@ -161,7 +199,7 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
         </tbody>
       </table>
 
-      {target && target.classId && (
+      {editable && target && target.classId && (
         <AssignModal
           mode="class"
           entityId={target.classId}

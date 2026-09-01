@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
+  BookOpenCheck,
   Building2,
   CalendarDays,
   Check,
+  ClipboardList,
   GraduationCap,
   LayoutGrid,
   LogOut,
@@ -13,13 +15,27 @@ import {
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 
-export type Page = 'schedule' | 'teachers' | 'classes' | 'components'
+export type Page =
+  | 'schedule'
+  | 'teachers'
+  | 'classes'
+  | 'components'
+  | 'allRegencia'
+  | 'allPlanejamento'
+
+/** valor especial do seletor de unidade que representa "Todas as unidades" */
+export const ALL_UNITS = '__all__'
 
 const items: { id: Page; label: string; icon: typeof CalendarDays }[] = [
   { id: 'schedule', label: 'Grade de Horários', icon: CalendarDays },
   { id: 'teachers', label: 'Professores', icon: Users },
   { id: 'classes', label: 'Turmas', icon: LayoutGrid },
   { id: 'components', label: 'Componentes', icon: GraduationCap },
+]
+
+const allUnitsItems: { id: Page; label: string; icon: typeof CalendarDays }[] = [
+  { id: 'allRegencia', label: 'Regência por Componente', icon: BookOpenCheck },
+  { id: 'allPlanejamento', label: 'Planejamento por Componente', icon: ClipboardList },
 ]
 
 export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) {
@@ -65,6 +81,17 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
   })
 
   const accessibleSchools = data.schools.filter((s) => accessibleSchoolIds.includes(s.id))
+  const isAllUnitsPage = page === 'allRegencia' || page === 'allPlanejamento'
+  const navItems = isAllUnitsPage ? allUnitsItems : items
+
+  const handleUnitChange = (value: string) => {
+    if (value === ALL_UNITS) {
+      setPage('allRegencia')
+      return
+    }
+    setActiveSchoolId(value)
+    if (isAllUnitsPage) setPage('schedule')
+  }
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white print:hidden">
@@ -83,8 +110,8 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
           <Building2 size={12} /> Unidade
         </label>
         <select
-          value={activeSchoolId}
-          onChange={(e) => setActiveSchoolId(e.target.value)}
+          value={isAllUnitsPage ? ALL_UNITS : activeSchoolId}
+          onChange={(e) => handleUnitChange(e.target.value)}
           className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm font-medium text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         >
           {accessibleSchools.map((s) => (
@@ -92,11 +119,12 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
               {s.name}
             </option>
           ))}
+          {accessibleSchoolIds.length > 1 && <option value={ALL_UNITS}>Todas as unidades</option>}
         </select>
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {items.map(({ id, label, icon: Icon }) => (
+        {navItems.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setPage(id)}
