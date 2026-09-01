@@ -179,6 +179,98 @@ export function ScheduleGrid({
                       entries.some((e) => e.week === 'A') &&
                       entries.some((e) => e.week === 'B')
 
+                    // Por Turma: permite co-docência — 2+ professores no
+                    // mesmo horário (ex: LET com um professor de FTP e um
+                    // de formação geral básica juntos). Mantém o caso
+                    // clássico de alternância A/B (isSplit) como está.
+                    if (mode === 'class' && !isSplit) {
+                      const dropKeyBase = `${day}::${slot.id}`
+                      return (
+                        <td key={day} className="p-1.5 align-top">
+                          <div className="flex w-full flex-col gap-1 rounded-lg border border-transparent print:min-h-[3rem]">
+                            {entries.map((entry) => {
+                              const alertLevel = alertLevelFor(entry.id)
+                              const component = entryDisplay(entry)
+                              const dropKey = `${dropKeyBase}::${entry.id}`
+                              return (
+                                <button
+                                  key={entry.id}
+                                  draggable
+                                  title={alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined}
+                                  onDragStart={() => setDraggingId(entry.id)}
+                                  onDragEnd={() => {
+                                    setDraggingId(null)
+                                    setDragOverKey(null)
+                                  }}
+                                  onDragOver={(e) => {
+                                    e.preventDefault()
+                                    setDragOverKey(dropKey)
+                                  }}
+                                  onDragLeave={() => setDragOverKey((k) => (k === dropKey ? null : k))}
+                                  onDrop={(e) => {
+                                    e.preventDefault()
+                                    handleDrop(day, slot.id, entry)
+                                  }}
+                                  onClick={() =>
+                                    setTarget({ day, timeSlotId: slot.id, week: entry.week, existing: entry })
+                                  }
+                                  className={`flex w-full cursor-grab flex-col justify-center rounded-md border px-2 py-1 text-left transition-colors hover:opacity-90 active:cursor-grabbing ${
+                                    alertLevel === 'conflict'
+                                      ? 'border-red-400 bg-red-50'
+                                      : alertLevel === 'labor'
+                                        ? 'border-amber-400 bg-amber-50'
+                                        : 'border-transparent'
+                                  } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
+                                  style={!alertLevel ? { backgroundColor: `${component?.color}1a` } : undefined}
+                                >
+                                  <span className="truncate text-xs font-semibold"
+                                    style={{
+                                      color:
+                                        alertLevel === 'conflict'
+                                          ? '#dc2626'
+                                          : alertLevel === 'labor'
+                                            ? '#d97706'
+                                            : component?.color,
+                                    }}
+                                  >
+                                    {component?.name}
+                                  </span>
+                                  <span className="truncate text-[11px] text-slate-500">{entryLabel(entry)}</span>
+                                  {entry.week !== 'AMBAS' && (
+                                    <span className="mt-0.5 w-fit rounded bg-slate-200 px-1 text-[10px] font-medium text-slate-600">
+                                      Semana {entry.week}
+                                    </span>
+                                  )}
+                                </button>
+                              )
+                            })}
+                            <button
+                              type="button"
+                              title="Adicionar outro professor a este horário"
+                              onDragOver={(e) => {
+                                if (!draggingId) return
+                                e.preventDefault()
+                                setDragOverKey(dropKeyBase)
+                              }}
+                              onDragLeave={() => setDragOverKey((k) => (k === dropKeyBase ? null : k))}
+                              onDrop={(e) => {
+                                e.preventDefault()
+                                handleDrop(day, slot.id, null)
+                              }}
+                              onClick={() =>
+                                setTarget({ day, timeSlotId: slot.id, week, existing: null })
+                              }
+                              className={`group flex w-full items-center justify-center rounded-md border border-dashed px-2 py-1 text-slate-300 hover:border-brand-300 hover:bg-brand-50/50 ${
+                                entries.length === 0 ? 'h-14' : 'h-6'
+                              } ${dragOverKey === dropKeyBase ? 'ring-2 ring-inset ring-brand-500' : ''}`}
+                            >
+                              <Plus size={entries.length === 0 ? 14 : 11} className="opacity-0 group-hover:opacity-100 print:hidden" />
+                            </button>
+                          </div>
+                        </td>
+                      )
+                    }
+
                     if (isSplit) {
                       const entryA = entries.find((e) => e.week === 'A')!
                       const entryB = entries.find((e) => e.week === 'B')!
