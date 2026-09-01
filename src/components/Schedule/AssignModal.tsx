@@ -15,6 +15,7 @@ export function AssignModal({
   week,
   existing,
   onClose,
+  lockComponent = false,
 }: {
   mode: Mode
   entityId: string
@@ -23,6 +24,9 @@ export function AssignModal({
   week: WeekType
   existing: ScheduleEntry | null
   onClose: () => void
+  /** trava o componente curricular (não editável) — usado ao abrir a partir
+   * da grade "Por Componente", onde a intenção é só trocar o professor */
+  lockComponent?: boolean
 }) {
   const { data, activeSchoolId, upsertScheduleEntry, removeScheduleEntry } = useApp()
   const schoolTeachers = data.teachers.filter((t) => t.schoolId === activeSchoolId)
@@ -181,11 +185,12 @@ export function AssignModal({
             </label>
             <select
               value={componentId}
+              disabled={lockComponent}
               onChange={(e) => {
                 setComponentId(e.target.value)
                 setSecondaryId('')
               }}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
             >
               <option value="">Selecione...</option>
               {availableComponents.map((c) => (

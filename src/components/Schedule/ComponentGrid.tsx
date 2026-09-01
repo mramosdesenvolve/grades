@@ -1,9 +1,10 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { TIME_SLOTS } from '../../data/seed'
 import { WEEKDAYS } from '../../types'
 import type { Shift, WeekType, ScheduleEntry } from '../../types'
 import { useApp } from '../../context/AppContext'
+import { AssignModal } from './AssignModal'
 
 // paleta estável para distinguir professores diferentes cobrindo o mesmo
 // componente (ex: Matemática dividida entre várias turmas/professores)
@@ -20,6 +21,7 @@ const TEACHER_PALETTE = [
  */
 export function ComponentGrid({ componentId, week }: { componentId: string; week: WeekType }) {
   const { data, conflicts, activeSchoolId } = useApp()
+  const [target, setTarget] = useState<ScheduleEntry | null>(null)
 
   // components é uma tabela global (o mesmo id de "Matemática" é usado nas
   // 4 unidades) — sem filtrar por schoolId aqui, a grade misturaria aulas
@@ -114,9 +116,12 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
                             const cls = data.classes.find((c) => c.id === entry.classId)
                             const teacher = data.teachers.find((t) => t.id === entry.teacherId)
                             return (
-                              <div
+                              <button
                                 key={entry.id}
-                                className={`flex items-baseline gap-1 rounded px-1.5 py-0.5 ${
+                                type="button"
+                                onClick={() => setTarget(entry)}
+                                title="Clique para trocar o professor responsável"
+                                className={`flex items-baseline gap-1 rounded px-1.5 py-0.5 text-left transition-opacity hover:opacity-80 ${
                                   isConflict ? 'border border-red-400 bg-red-50' : ''
                                 }`}
                                 style={
@@ -142,7 +147,7 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
                                 <span className="truncate text-[10px] text-slate-500">
                                   {teacher?.name}
                                 </span>
-                              </div>
+                              </button>
                             )
                           })}
                         </div>
@@ -155,6 +160,19 @@ export function ComponentGrid({ componentId, week }: { componentId: string; week
           })}
         </tbody>
       </table>
+
+      {target && target.classId && (
+        <AssignModal
+          mode="class"
+          entityId={target.classId}
+          day={target.day}
+          timeSlotId={target.timeSlotId}
+          week={target.week}
+          existing={target}
+          lockComponent
+          onClose={() => setTarget(null)}
+        />
+      )}
     </div>
   )
 }
