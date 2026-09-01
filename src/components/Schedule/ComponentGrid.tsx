@@ -19,9 +19,14 @@ const TEACHER_PALETTE = [
  * trilha) e não existe uma única "grade do professor" que mostre tudo.
  */
 export function ComponentGrid({ componentId, week }: { componentId: string; week: WeekType }) {
-  const { data, conflicts } = useApp()
+  const { data, conflicts, activeSchoolId } = useApp()
 
-  const entries = data.schedule.filter((e) => e.componentId === componentId && e.type === 'aula')
+  // components é uma tabela global (o mesmo id de "Matemática" é usado nas
+  // 4 unidades) — sem filtrar por schoolId aqui, a grade misturaria aulas
+  // de outras unidades.
+  const entries = data.schedule.filter(
+    (e) => e.componentId === componentId && e.type === 'aula' && e.schoolId === activeSchoolId,
+  )
 
   const teacherIds = Array.from(new Set(entries.map((e) => e.teacherId)))
   const colorForTeacher = (teacherId: string) =>
