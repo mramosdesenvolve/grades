@@ -135,7 +135,7 @@ export function TeachersPage() {
                     {saldo > 0
                       ? `Precisa ampliar +${fmtHours(saldo)}h para cobrir a grade de 2027`
                       : saldo < 0
-                        ? `Contrato ${fmtHours(Math.abs(saldo))}h acima da demanda de 2027`
+                        ? `Contrato ${fmtHours(Math.abs(saldo))}h acima da demanda de 2027. Essa CH poderá ser alocada em Planejamento`
                         : 'Carga contratada cobre exatamente a demanda de 2027'}
                   </div>
                 </div>
