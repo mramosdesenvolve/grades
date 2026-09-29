@@ -19,6 +19,7 @@ const UNITS = [
   { schoolId: 'barra-da-tijuca', email: 'barra-da-tijuca@unidade.login' },
   { schoolId: 'niteroi', email: 'niteroi@unidade.login' },
   { schoolId: 'politecnico', email: 'politecnico@unidade.login' },
+  { schoolId: 'piedade', email: 'piedade@unidade.login' },
 ]
 
 async function main() {

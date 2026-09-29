@@ -6,6 +6,7 @@ export const SCHOOLS: School[] = [
   { id: 'barra-da-tijuca', name: 'Barra da Tijuca' },
   { id: 'niteroi', name: 'Niterói' },
   { id: 'politecnico', name: 'Politécnico' },
+  { id: 'piedade', name: 'Piedade' },
 ]
 
 export const TIME_SLOTS: TimeSlot[] = [

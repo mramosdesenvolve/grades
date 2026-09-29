@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 
 // unidades com login pelo nome (sem e-mail) — o app traduz para o e-mail
 // sintético interno correspondente antes de autenticar
-const UNIT_IDS = ['capsula', 'barra-da-tijuca', 'niteroi', 'politecnico']
+const UNIT_IDS = ['capsula', 'barra-da-tijuca', 'niteroi', 'politecnico', 'piedade']
 
 function normalize(s: string) {
   return s
