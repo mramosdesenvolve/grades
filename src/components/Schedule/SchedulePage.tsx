@@ -32,7 +32,7 @@ export function SchedulePage() {
   } = useApp()
   const [viewMode, setViewMode] = useState<ViewMode>('class')
   const [entityId, setEntityId] = useState('')
-  const [week, setWeek] = useState<WeekType>('A')
+  const [week, setWeek] = useState<WeekType>('AMBAS')
   const [bulkPrint, setBulkPrint] = useState<BulkPrintTarget>(null)
 
   const schoolClasses = data.classes.filter((c) => c.schoolId === activeSchoolId)
