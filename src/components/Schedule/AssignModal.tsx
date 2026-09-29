@@ -28,8 +28,17 @@ export function AssignModal({
    * da grade "Por Componente", onde a intenção é só trocar o professor */
   lockComponent?: boolean
 }) {
-  const { data, activeSchoolId, upsertScheduleEntry, removeScheduleEntry, beginBatch, commitBatch } =
-    useApp()
+  const {
+    data,
+    activeSchoolId,
+    upsertScheduleEntry,
+    removeScheduleEntry,
+    beginBatch,
+    commitBatch,
+    scheduleLocked,
+    isAdmin,
+  } = useApp()
+  const editLocked = scheduleLocked && !isAdmin
   const schoolTeachers = data.teachers.filter((t) => t.schoolId === activeSchoolId)
   const schoolClasses = data.classes.filter((c) => c.schoolId === activeSchoolId)
   const slot = TIME_SLOTS.find((s) => s.id === timeSlotId)!
@@ -169,9 +178,9 @@ export function AssignModal({
   }
 
   const isOrientacaoEntry = mode === 'planning' && canMarkOrientacao && planningKind === 'orientacao'
-  const canSave = mode === 'planning'
-    ? isOrientacaoEntry || !!componentId
-    : !!componentId && !!secondaryId
+  const canSave =
+    !editLocked &&
+    (mode === 'planning' ? isOrientacaoEntry || !!componentId : !!componentId && !!secondaryId)
 
   return (
     <Modal title={`${day} · ${slot.label} (${slot.shift})`} onClose={onClose}>
@@ -348,7 +357,7 @@ export function AssignModal({
                 <button
                   type="button"
                   onClick={() => setAddingCoTeacher(true)}
-                  disabled={!componentId}
+                  disabled={!componentId || editLocked}
                   className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-500 hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Plus size={13} /> Adicionar professor junto
@@ -360,6 +369,12 @@ export function AssignModal({
             </p>
           </div>
         )}
+        {editLocked && (
+          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+            <AlertTriangle size={14} className="shrink-0" />
+            A edição da grade está bloqueada pela coordenação pedagógica.
+          </div>
+        )}
       </div>
 
       <div className="mt-5 flex justify-between gap-2">
@@ -369,7 +384,8 @@ export function AssignModal({
               removeScheduleEntry(existing.id)
               onClose()
             }}
-            className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+            disabled={editLocked}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 size={14} /> Remover
           </button>

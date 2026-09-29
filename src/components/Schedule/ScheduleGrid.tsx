@@ -27,7 +27,10 @@ export function ScheduleGrid({
     upsertScheduleEntry,
     beginBatch,
     commitBatch,
+    scheduleLocked,
+    isAdmin,
   } = useApp()
+  const editLocked = scheduleLocked && !isAdmin
 
   // conflito (mesmo professor em 2 lugares) tem prioridade visual sobre um
   // alerta trabalhista (excesso diário / sem almoço) — os dois nunca
@@ -62,6 +65,7 @@ export function ScheduleGrid({
 
   const handleDrop = async (day: Weekday, timeSlotId: string, targetEntry: ScheduleEntry | null) => {
     setDragOverKey(null)
+    if (editLocked) return
     if (!draggingId) return
     const sourceId = draggingId
     setDraggingId(null)
@@ -195,7 +199,7 @@ export function ScheduleGrid({
                               return (
                                 <button
                                   key={entry.id}
-                                  draggable
+                                  draggable={!editLocked}
                                   title={alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined}
                                   onDragStart={() => setDraggingId(entry.id)}
                                   onDragEnd={() => {
@@ -284,7 +288,7 @@ export function ScheduleGrid({
                               return (
                                 <button
                                   key={entry.id}
-                                  draggable
+                                  draggable={!editLocked}
                                   title={alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined}
                                   onDragStart={() => setDraggingId(entry.id)}
                                   onDragEnd={() => {
@@ -381,7 +385,7 @@ export function ScheduleGrid({
                                   return (
                                     <button
                                       key={w}
-                                      draggable
+                                      draggable={!editLocked}
                                       title={alertLevel === 'labor' ? laborAlertReason(pe.id) : undefined}
                                       onDragStart={() => setDraggingId(pe.id)}
                                       onDragEnd={() => {
@@ -520,7 +524,7 @@ export function ScheduleGrid({
                     return (
                       <td key={day} className="p-1.5 align-top">
                         <button
-                          draggable={!!entry}
+                          draggable={!editLocked && !!entry}
                           title={
                             entry && alertLevel === 'labor'
                               ? laborAlertReason(entry.id)

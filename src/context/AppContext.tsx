@@ -41,6 +41,16 @@ interface AppContextValue {
   lastSavedAt: number
   saveNow: () => void
 
+  /** true para o login administrador (núcleo pulsante / conta geral) */
+  isAdmin: boolean
+  /** quando true, ninguém além do admin consegue editar a grade (schedule_entries) */
+  scheduleLocked: boolean
+  /** liga/desliga o bloqueio global de edição da grade — só funciona para admin */
+  setScheduleLocked: (locked: boolean) => void
+  /** mensagem exibida quando uma edição de grade é recusada por estar bloqueada */
+  lockNotice: string | null
+  clearLockNotice: () => void
+
   addTeacher: (t: Omit<Teacher, 'id' | 'schoolId'>) => void
   updateTeacher: (id: string, t: Omit<Teacher, 'id' | 'schoolId'>) => void
   deleteTeacher: (id: string) => void
@@ -221,7 +231,10 @@ const MAX_UNDO = 30
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [data, setData] = useState<AppData>(emptyData)
-  const [accessibleSchoolIds, setAccessibleSchoolIds] = useState<string[]>([])
+  const [rawAccessibleSchoolIds, setRawAccessibleSchoolIds] = useState<string[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [scheduleLocked, setScheduleLockedState] = useState(false)
+  const [lockNotice, setLockNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastSavedAt, setLastSavedAt] = useState(() => Date.now())
   const [activeSchoolId, setActiveSchoolIdRaw] = useLocalStorage<string>(
@@ -232,7 +245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const batchRef = useRef<UndoStep[] | null>(null)
 
   const refetchAll = useCallback(async () => {
-    const [schoolsRes, componentsRes, teachersRows, classesRows, scheduleRows, accessRes] =
+    const [schoolsRes, componentsRes, teachersRows, classesRows, scheduleRows, accessRes, adminRes, settingsRes] =
       await Promise.all([
         supabase.from('schools').select('*'),
         supabase.from('components').select('*'),
@@ -240,6 +253,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchAllRows<DbClass>('classes'),
         fetchAllRows<DbEntry>('schedule_entries'),
         supabase.from('school_access').select('school_id'),
+        supabase.rpc('is_admin'),
+        supabase.from('system_settings').select('schedule_locked').eq('id', 1).single(),
       ])
 
     const errors = [schoolsRes.error, componentsRes.error, accessRes.error].filter(Boolean)
@@ -254,7 +269,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       classes: classesRows.map(classFromDb),
       schedule: scheduleRows.map(entryFromDb),
     })
-    setAccessibleSchoolIds((accessRes.data ?? []).map((a) => a.school_id))
+    setRawAccessibleSchoolIds((accessRes.data ?? []).map((a) => a.school_id))
+    setIsAdmin(Boolean(adminRes.data))
+    setScheduleLockedState(Boolean(settingsRes.data?.schedule_locked))
     setLastSavedAt(Date.now())
     setLoading(false)
   }, [])
@@ -262,13 +279,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) {
       setData(emptyData)
-      setAccessibleSchoolIds([])
+      setRawAccessibleSchoolIds([])
+      setIsAdmin(false)
+      setScheduleLockedState(false)
       setLoading(false)
       return
     }
     setLoading(true)
     refetchAll()
   }, [user, refetchAll])
+
+  const accessibleSchoolIds = useMemo(
+    () => (isAdmin ? data.schools.map((s) => s.id) : rawAccessibleSchoolIds),
+    [isAdmin, data.schools, rawAccessibleSchoolIds],
+  )
 
   // registra o passo inverso de uma mutação bem-sucedida; se estiver dentro
   // de um beginBatch()/commitBatch(), acumula no lote em vez de empilhar
@@ -352,6 +376,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveNow: () => {
       refetchAll()
     },
+
+    isAdmin,
+    scheduleLocked,
+    setScheduleLocked: (locked) => {
+      supabase
+        .from('system_settings')
+        .update({
+          schedule_locked: locked,
+          locked_by: locked ? user?.id ?? null : null,
+          locked_at: locked ? new Date().toISOString() : null,
+        })
+        .eq('id', 1)
+        .then(({ error }) => {
+          if (error) {
+            console.error(error)
+            return
+          }
+          setScheduleLockedState(locked)
+        })
+    },
+    lockNotice,
+    clearLockNotice: () => setLockNotice(null),
 
     addTeacher: (t) => {
       supabase
@@ -548,6 +594,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
 
     upsertScheduleEntry: async (entry) => {
+      if (scheduleLocked && !isAdmin) {
+        setLockNotice('A edição da grade está bloqueada pela coordenação pedagógica.')
+        return
+      }
       if (entry.id) {
         const id = entry.id
         const current = data.schedule.find((e) => e.id === id)
@@ -581,6 +631,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     },
     removeScheduleEntry: (id) => {
+      if (scheduleLocked && !isAdmin) {
+        setLockNotice('A edição da grade está bloqueada pela coordenação pedagógica.')
+        return
+      }
       const current = data.schedule.find((e) => e.id === id)
       supabase
         .from('schedule_entries')

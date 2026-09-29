@@ -6,6 +6,10 @@ import { useAuth } from '../../context/AuthContext'
 // sintético interno correspondente antes de autenticar
 const UNIT_IDS = ['capsula', 'barra-da-tijuca', 'niteroi', 'politecnico', 'piedade']
 
+// login administrador (núcleo pulsante / coordenação pedagógica geral) — vê e
+// edita todas as unidades e controla o bloqueio global da grade
+const ADMIN_IDS = ['nucleo-pulsante']
+
 function normalize(s: string) {
   return s
     .trim()
@@ -20,6 +24,7 @@ function resolveLoginIdentifier(input: string): string {
   if (trimmed.includes('@')) return trimmed // e-mail normal (ex: administrador)
   const normalized = normalize(trimmed)
   if (UNIT_IDS.includes(normalized)) return `${normalized}@unidade.login`
+  if (ADMIN_IDS.includes(normalized)) return `${normalized}@administrador.login`
   return trimmed
 }
 

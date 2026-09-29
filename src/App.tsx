@@ -5,6 +5,7 @@ import { LoginPage } from './components/Auth/LoginPage'
 import { Sidebar, type Page } from './components/Layout/Sidebar'
 import { SchedulePage } from './components/Schedule/SchedulePage'
 import { AllUnitsComponentPage } from './components/Schedule/AllUnitsComponentPage'
+import { AdminPage } from './components/Admin/AdminPage'
 import { TeachersPage } from './components/Teachers/TeachersPage'
 import { ClassesPage } from './components/Classes/ClassesPage'
 import { ComponentsPage } from './components/Components/ComponentsPage'
@@ -49,6 +50,7 @@ function AppContent() {
         {page === 'components' && <ComponentsPage />}
         {page === 'allRegencia' && <AllUnitsComponentPage entryType="aula" />}
         {page === 'allPlanejamento' && <AllUnitsComponentPage entryType="planejamento" />}
+        {page === 'admin' && <AdminPage />}
       </main>
     </div>
   )

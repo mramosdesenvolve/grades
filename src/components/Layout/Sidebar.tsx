@@ -7,8 +7,10 @@ import {
   ClipboardList,
   GraduationCap,
   LayoutGrid,
+  Lock,
   LogOut,
   RefreshCw,
+  ShieldCheck,
   Undo2,
   Users,
 } from 'lucide-react'
@@ -22,6 +24,7 @@ export type Page =
   | 'components'
   | 'allRegencia'
   | 'allPlanejamento'
+  | 'admin'
 
 /** valor especial do seletor de unidade que representa "Todas as unidades" */
 export const ALL_UNITS = '__all__'
@@ -49,6 +52,8 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
     undo,
     canUndo,
     undoLabel,
+    isAdmin,
+    scheduleLocked,
   } = useApp()
   const { user, signOut } = useAuth()
   const [justSaved, setJustSaved] = useState(false)
@@ -82,7 +87,10 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
 
   const accessibleSchools = data.schools.filter((s) => accessibleSchoolIds.includes(s.id))
   const isAllUnitsPage = page === 'allRegencia' || page === 'allPlanejamento'
-  const navItems = isAllUnitsPage ? allUnitsItems : items
+  const baseNavItems = isAllUnitsPage ? allUnitsItems : items
+  const navItems = isAdmin
+    ? [...baseNavItems, { id: 'admin' as Page, label: 'Administração', icon: ShieldCheck }]
+    : baseNavItems
 
   const handleUnitChange = (value: string) => {
     if (value === ALL_UNITS) {
@@ -141,6 +149,12 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
       </nav>
 
       <div className="border-t border-slate-100 p-3">
+        {scheduleLocked && (
+          <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600">
+            <Lock size={13} className="shrink-0" />
+            {isAdmin ? 'Grade bloqueada para os demais logins' : 'Edição da grade bloqueada'}
+          </div>
+        )}
         <button
           onClick={() => undo()}
           disabled={!canUndo}
