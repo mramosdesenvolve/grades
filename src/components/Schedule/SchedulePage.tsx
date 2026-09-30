@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   Printer,
   Upload,
+  Users,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import type { WeekType } from '../../types'
@@ -14,11 +15,12 @@ import { ScheduleGrid } from './ScheduleGrid'
 import { ComponentGrid } from './ComponentGrid'
 import { PrintAllGrids } from './PrintAllGrids'
 import { PrintTeacherReport } from './PrintTeacherReport'
+import { PrintTeacherGrids } from './PrintTeacherGrids'
 import { exportScheduleCsv } from '../../utils/csv'
 import { downloadJson, readJsonFile } from '../../utils/backup'
 
 type ViewMode = 'class' | 'teacher' | 'planning' | 'component'
-type BulkPrintTarget = 'grids' | 'report' | null
+type BulkPrintTarget = 'grids' | 'report' | 'teacherGrids' | null
 
 export function SchedulePage() {
   const {
@@ -193,6 +195,13 @@ export function SchedulePage() {
         >
           <ClipboardList size={15} /> Relatório de Carga (PDF)
         </button>
+        <button
+          onClick={() => setBulkPrint('teacherGrids')}
+          disabled={schoolTeachers.length === 0}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        >
+          <Users size={15} /> Grade por Professor (PDF)
+        </button>
       </div>
 
       <div className="mb-5 flex flex-wrap items-center gap-3 print:hidden">
@@ -304,6 +313,11 @@ export function SchedulePage() {
       {bulkPrint === 'report' && (
         <div className="hidden print:block">
           <PrintTeacherReport schoolId={activeSchoolId} />
+        </div>
+      )}
+      {bulkPrint === 'teacherGrids' && (
+        <div className="hidden print:block">
+          <PrintTeacherGrids schoolId={activeSchoolId} />
         </div>
       )}
     </div>
