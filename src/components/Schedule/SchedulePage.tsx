@@ -5,6 +5,7 @@ import {
   Download,
   FileJson,
   LayoutGrid,
+  FileSpreadsheet,
   Printer,
   Upload,
   Users,
@@ -17,6 +18,7 @@ import { PrintAllGrids } from './PrintAllGrids'
 import { PrintTeacherReport } from './PrintTeacherReport'
 import { PrintTeacherGrids } from './PrintTeacherGrids'
 import { exportScheduleCsv } from '../../utils/csv'
+import { exportScheduleExcel } from '../../utils/excelExport'
 import { downloadJson, readJsonFile } from '../../utils/backup'
 
 type ViewMode = 'class' | 'teacher' | 'planning' | 'component'
@@ -36,6 +38,7 @@ export function SchedulePage() {
   const [entityId, setEntityId] = useState('')
   const [week, setWeek] = useState<WeekType>('AMBAS')
   const [bulkPrint, setBulkPrint] = useState<BulkPrintTarget>(null)
+  const [exportingExcel, setExportingExcel] = useState(false)
 
   const schoolClasses = data.classes.filter((c) => c.schoolId === activeSchoolId)
   const schoolTeachers = data.teachers.filter((t) => t.schoolId === activeSchoolId)
@@ -126,6 +129,25 @@ export function SchedulePage() {
     })
   }
 
+  const handleExportExcel = async () => {
+    setExportingExcel(true)
+    try {
+      await exportScheduleExcel({
+        data,
+        schoolId: activeSchoolId,
+        conflicts,
+        dailyOverloadEntries,
+        lunchBreakViolations,
+        gapSlots,
+      })
+    } catch (err) {
+      console.error(err)
+      alert('Não foi possível gerar o Excel.')
+    } finally {
+      setExportingExcel(false)
+    }
+  }
+
   const handleImport = (file: File) => {
     readJsonFile(file)
       .then((imported) => replaceAllData(imported))
@@ -201,6 +223,13 @@ export function SchedulePage() {
           className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
         >
           <Users size={15} /> Grade por Professor (PDF)
+        </button>
+        <button
+          onClick={handleExportExcel}
+          disabled={exportingExcel || schoolClasses.length === 0}
+          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          <FileSpreadsheet size={15} /> {exportingExcel ? 'Gerando…' : 'Exportar Excel (completo)'}
         </button>
       </div>
 
