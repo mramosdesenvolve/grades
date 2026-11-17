@@ -9,7 +9,7 @@ body,
 }
 
 body {
-  @apply bg-slate-50 text-slate-800 antialiased;
+  @apply bg-slate-50 font-sans text-slate-800 antialiased;
 }
 
 @media print {

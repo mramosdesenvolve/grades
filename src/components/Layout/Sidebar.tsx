@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
+import logoEtim from '../../assets/logo-etim-senac-branco.svg'
 
 export type Page =
   | 'schedule'
@@ -103,13 +104,11 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white print:hidden">
-      <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white">
-          <CalendarDays size={18} />
-        </div>
+      <div className="flex items-center gap-3 rounded-br-[28px] bg-brand-600 px-5 py-4">
+        <img src={logoEtim} alt="ETIM Senac RJ" className="h-11 w-auto shrink-0" />
         <div>
-          <p className="text-sm font-semibold text-slate-800 leading-tight">Grades</p>
-          <p className="text-xs text-slate-400 leading-tight">Escolares</p>
+          <p className="text-sm font-bold leading-tight text-white">Grades</p>
+          <p className="text-xs leading-tight text-brand-200">Escolares</p>
         </div>
       </div>
 
@@ -136,10 +135,10 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
           <button
             key={id}
             onClick={() => setPage(id)}
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+            className={`flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
               page === id
-                ? 'bg-brand-50 text-brand-700'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-senac-amarelo font-semibold text-brand-600'
+                : 'text-slate-600 hover:bg-brand-100 hover:text-brand-600'
             }`}
           >
             <Icon size={18} />

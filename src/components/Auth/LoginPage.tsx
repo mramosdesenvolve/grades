@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { CalendarDays, LogIn } from 'lucide-react'
+import { LogIn } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import logoEtim from '../../assets/logo-etim-senac-branco.svg'
 
 // unidades com login pelo nome (sem e-mail) — o app traduz para o e-mail
 // sintético interno correspondente antes de autenticar
@@ -45,15 +46,13 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white">
-            <CalendarDays size={18} />
-          </div>
+    <div className="flex min-h-screen items-center justify-center bg-brand-600 px-4">
+      <div className="w-full max-w-sm rounded-[28px] bg-white p-7 shadow-xl">
+        <div className="mb-6 flex items-center gap-3 rounded-2xl bg-brand-600 px-4 py-3">
+          <img src={logoEtim} alt="ETIM Senac RJ" className="h-12 w-auto shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-slate-800 leading-tight">Grades</p>
-            <p className="text-xs text-slate-400 leading-tight">Escolares</p>
+            <p className="text-sm font-bold leading-tight text-white">Grades</p>
+            <p className="text-xs leading-tight text-brand-200">Escolares</p>
           </div>
         </div>
 
@@ -88,7 +87,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-senac-laranja px-4 py-2.5 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50"
           >
             <LogIn size={16} /> {loading ? 'Entrando...' : 'Entrar'}
           </button>
