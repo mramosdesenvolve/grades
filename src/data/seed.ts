@@ -19,9 +19,9 @@ export const TIME_SLOTS: TimeSlot[] = [
   { id: 'v1', shift: 'Vespertino', order: 1, label: '13h00' },
   { id: 'v2', shift: 'Vespertino', order: 2, label: '13h50' },
   { id: 'v3', shift: 'Vespertino', order: 3, label: '14h40' },
-  { id: 'v4', shift: 'Vespertino', order: 4, label: '15h50' },
-  { id: 'v5', shift: 'Vespertino', order: 5, label: '16h40' },
-  { id: 'v6', shift: 'Vespertino', order: 6, label: '17h30' },
+  { id: 'v4', shift: 'Vespertino', order: 4, label: '16h00' },
+  { id: 'v5', shift: 'Vespertino', order: 5, label: '16h50' },
+  { id: 'v6', shift: 'Vespertino', order: 6, label: '17h40' },
 ]
 
 function makeComponent(

@@ -32,9 +32,9 @@ const TIME_SLOTS = [
   { id: 'v1', shift: 'Vespertino', label: '13h00' },
   { id: 'v2', shift: 'Vespertino', label: '13h50' },
   { id: 'v3', shift: 'Vespertino', label: '14h40' },
-  { id: 'v4', shift: 'Vespertino', label: '15h50' },
-  { id: 'v5', shift: 'Vespertino', label: '16h40' },
-  { id: 'v6', shift: 'Vespertino', label: '17h30' },
+  { id: 'v4', shift: 'Vespertino', label: '16h00' },
+  { id: 'v5', shift: 'Vespertino', label: '16h50' },
+  { id: 'v6', shift: 'Vespertino', label: '17h40' },
 ]
 
 function entryWeight(e) { return e.week === 'AMBAS' ? 1 : 0.5 }
