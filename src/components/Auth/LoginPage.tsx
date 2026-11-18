@@ -46,7 +46,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-brand-600 px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-brand-600 px-4">
       <div className="w-full max-w-sm rounded-[28px] bg-white p-7 shadow-xl">
         <div className="mb-6 flex items-center gap-3 rounded-2xl bg-brand-600 px-4 py-3">
           <img src={logoEtim} alt="ETIM Senac RJ" className="h-12 w-auto shrink-0" />
@@ -97,6 +97,9 @@ export function LoginPage() {
           Acesso por convite. Fale com o administrador se precisar de uma conta.
         </p>
       </div>
+      <p className="absolute bottom-4 left-0 right-0 text-center text-[11px] text-brand-200">
+        Desenvolvimento Marcos Ramos
+      </p>
     </div>
   )
 }

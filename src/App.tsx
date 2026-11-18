@@ -43,7 +43,8 @@ function AppContent() {
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar page={page} setPage={setPage} />
-      <main className="flex-1 overflow-x-hidden p-6 print:p-0">
+      <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden p-6 print:p-0">
+        <div className="flex-1">
         {page === 'schedule' && <SchedulePage />}
         {page === 'teachers' && <TeachersPage />}
         {page === 'classes' && <ClassesPage />}
@@ -51,6 +52,10 @@ function AppContent() {
         {page === 'allRegencia' && <AllUnitsComponentPage entryType="aula" />}
         {page === 'allPlanejamento' && <AllUnitsComponentPage entryType="planejamento" />}
         {page === 'admin' && <AdminPage />}
+        </div>
+        <footer className="mt-8 text-center text-[11px] text-slate-400 print:hidden">
+          Desenvolvimento Marcos Ramos
+        </footer>
       </main>
     </div>
   )
