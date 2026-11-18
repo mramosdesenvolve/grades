@@ -276,8 +276,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }, [])
 
+  // depende só do id: o Supabase renova o objeto `user` a cada refresh de token e a cada
+  // vez que a aba volta ao foco; reagir ao objeto fazia a tela inteira recarregar toda hora
+  const userId = user?.id ?? null
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setData(emptyData)
       setRawAccessibleSchoolIds([])
       setIsAdmin(false)
@@ -287,7 +290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true)
     refetchAll()
-  }, [user, refetchAll])
+  }, [userId, refetchAll])
 
   const accessibleSchoolIds = useMemo(
     () => (isAdmin ? data.schools.map((s) => s.id) : rawAccessibleSchoolIds),
