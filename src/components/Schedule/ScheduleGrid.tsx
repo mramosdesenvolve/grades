@@ -7,6 +7,20 @@ import { useApp } from '../../context/AppContext'
 import { gapSlotKey } from '../../utils/conflicts'
 import { AssignModal } from './AssignModal'
 
+/** cada tempo dura 50 min; o rótulo guarda só o início ("07h15") */
+function slotRange(label: string) {
+  const [h, m] = label.split('h').map(Number)
+  const end = h * 60 + m + 50
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return { start: label, end: `${pad(Math.floor(end / 60))}h${pad(end % 60)}` }
+}
+
+/** pausas entre tempos (aparecem como uma faixa fina na grade): depois do 3º tempo de cada turno */
+const BREAK_AFTER: Record<string, string> = {
+  m3: 'Intervalo · 09h45 – 10h15',
+  v3: 'Recreio · 15h30 – 16h00',
+}
+
 export function ScheduleGrid({
   mode,
   entityId,
@@ -139,16 +153,16 @@ export function ScheduleGrid({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm print:border-0 print:shadow-none">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+      <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
         <thead>
           <tr>
-            <th className="w-28 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">
+            <th className="sticky top-0 z-10 w-28 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">
               Horário
             </th>
             {WEEKDAYS.map((d) => (
               <th
                 key={d}
-                className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500"
+                className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500"
               >
                 {d}
               </th>
@@ -172,8 +186,9 @@ export function ScheduleGrid({
                   </tr>
                 )}
                 <tr key={slot.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-3 py-2 align-top text-xs font-medium text-slate-500">
-                    {slot.label}
+                  <td className="px-3 py-1.5 align-top text-xs leading-tight text-slate-500">
+                    <span className="block font-semibold text-brand-600">{slotRange(slot.label).start}</span>
+                    {slotRange(slot.label).end}
                   </td>
                   {WEEKDAYS.map((day) => {
                     const entries = findEntries(day, slot.id)
@@ -189,65 +204,116 @@ export function ScheduleGrid({
                     // clássico de alternância A/B (isSplit) como está.
                     if (mode === 'class' && !isSplit) {
                       const dropKeyBase = `${day}::${slot.id}`
+                      // co-docência: vários professores no mesmo componente viram
+                      // UM bloco, com os professores em etiquetas lado a lado
+                      const sameComponent =
+                        entries.length > 1 && entries.every((e) => e.componentId === entries[0].componentId)
+                      const colorOf = (entry: ScheduleEntry, level: 'conflict' | 'labor' | null) =>
+                        level === 'conflict' ? '#dc2626' : level === 'labor' ? '#d97706' : entryDisplay(entry).color
+                      const dragProps = (entry: ScheduleEntry, dropKey: string) => ({
+                        draggable: !editLocked,
+                        onDragStart: () => setDraggingId(entry.id),
+                        onDragEnd: () => {
+                          setDraggingId(null)
+                          setDragOverKey(null)
+                        },
+                        onDragOver: (e: React.DragEvent) => {
+                          e.preventDefault()
+                          setDragOverKey(dropKey)
+                        },
+                        onDragLeave: () => setDragOverKey((k) => (k === dropKey ? null : k)),
+                        onDrop: (e: React.DragEvent) => {
+                          e.preventDefault()
+                          handleDrop(day, slot.id, entry)
+                        },
+                        onClick: () => setTarget({ day, timeSlotId: slot.id, week: entry.week, existing: entry }),
+                      })
+                      const alertClass = (level: 'conflict' | 'labor' | null) =>
+                        level === 'conflict'
+                          ? 'border-red-400 bg-red-50'
+                          : level === 'labor'
+                            ? 'border-amber-400 bg-amber-50'
+                            : 'border-transparent'
                       return (
-                        <td key={day} className="p-1.5 align-top">
-                          <div className="flex w-full flex-col gap-1 rounded-lg border border-transparent print:min-h-[3rem]">
-                            {entries.map((entry) => {
-                              const alertLevel = alertLevelFor(entry.id)
-                              const component = entryDisplay(entry)
-                              const dropKey = `${dropKeyBase}::${entry.id}`
-                              return (
-                                <button
-                                  key={entry.id}
-                                  draggable={!editLocked}
-                                  title={alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined}
-                                  onDragStart={() => setDraggingId(entry.id)}
-                                  onDragEnd={() => {
-                                    setDraggingId(null)
-                                    setDragOverKey(null)
-                                  }}
-                                  onDragOver={(e) => {
-                                    e.preventDefault()
-                                    setDragOverKey(dropKey)
-                                  }}
-                                  onDragLeave={() => setDragOverKey((k) => (k === dropKey ? null : k))}
-                                  onDrop={(e) => {
-                                    e.preventDefault()
-                                    handleDrop(day, slot.id, entry)
-                                  }}
-                                  onClick={() =>
-                                    setTarget({ day, timeSlotId: slot.id, week: entry.week, existing: entry })
-                                  }
-                                  className={`flex w-full cursor-grab flex-col justify-center rounded-md border px-2 py-1 text-left transition-colors hover:opacity-90 active:cursor-grabbing ${
-                                    alertLevel === 'conflict'
-                                      ? 'border-red-400 bg-red-50'
-                                      : alertLevel === 'labor'
-                                        ? 'border-amber-400 bg-amber-50'
-                                        : 'border-transparent'
-                                  } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
-                                  style={!alertLevel ? { backgroundColor: `${component?.color}1a` } : undefined}
-                                >
-                                  <span className="truncate text-xs font-semibold"
-                                    style={{
-                                      color:
-                                        alertLevel === 'conflict'
-                                          ? '#dc2626'
-                                          : alertLevel === 'labor'
-                                            ? '#d97706'
-                                            : component?.color,
-                                    }}
+                        <td key={day} className="p-[3px] align-top">
+                          <div className="group/cell relative flex w-full flex-col gap-0.5 rounded-lg print:min-h-[3rem]">
+                            {sameComponent ? (
+                              (() => {
+                                const first = entries[0]
+                                const comp = entryDisplay(first)
+                                const levels = entries.map((e) => alertLevelFor(e.id))
+                                const level = levels.includes('conflict')
+                                  ? 'conflict'
+                                  : levels.includes('labor')
+                                    ? 'labor'
+                                    : null
+                                return (
+                                  <div
+                                    className={`flex min-h-[56px] w-full flex-col justify-center rounded-lg border border-l-4 px-2 py-1 text-left ${alertClass(level)}`}
+                                    style={
+                                      !level
+                                        ? { backgroundColor: `${comp.color}14`, borderLeftColor: comp.color }
+                                        : undefined
+                                    }
                                   >
-                                    {component?.name}
-                                  </span>
-                                  <span className="truncate text-[11px] text-slate-500">{entryLabel(entry)}</span>
-                                  {entry.week !== 'AMBAS' && (
-                                    <span className="mt-0.5 w-fit rounded bg-slate-200 px-1 text-[10px] font-medium text-slate-600">
-                                      Semana {entry.week}
+                                    <span className="truncate text-xs font-semibold" style={{ color: colorOf(first, level) }}>
+                                      {comp.name}
                                     </span>
-                                  )}
-                                </button>
-                              )
-                            })}
+                                    <span className="mt-0.5 flex flex-wrap gap-1">
+                                      {entries.map((entry) => {
+                                        const t = data.teachers.find((x) => x.id === entry.teacherId)?.name ?? '?'
+                                        return (
+                                          <button
+                                            key={entry.id}
+                                            type="button"
+                                            title={`${comp.name} · ${t}`}
+                                            {...dragProps(entry, `${dropKeyBase}::${entry.id}`)}
+                                            className="max-w-full cursor-grab truncate rounded-full border border-slate-300 bg-white px-1.5 text-[10px] text-slate-600 hover:border-brand-400"
+                                          >
+                                            {t}
+                                          </button>
+                                        )
+                                      })}
+                                    </span>
+                                  </div>
+                                )
+                              })()
+                            ) : (
+                              entries.map((entry) => {
+                                const level = alertLevelFor(entry.id)
+                                const comp = entryDisplay(entry)
+                                const dropKey = `${dropKeyBase}::${entry.id}`
+                                return (
+                                  <button
+                                    key={entry.id}
+                                    {...dragProps(entry, dropKey)}
+                                    title={
+                                      level === 'labor'
+                                        ? laborAlertReason(entry.id)
+                                        : `${comp.name} · ${entryLabel(entry) ?? ''}${entry.week !== 'AMBAS' ? ` · Semana ${entry.week}` : ''}`
+                                    }
+                                    className={`flex min-h-[40px] w-full cursor-grab flex-col justify-center rounded-lg border border-l-4 px-2 py-1 text-left transition-colors hover:opacity-90 active:cursor-grabbing ${alertClass(level)} ${
+                                      dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''
+                                    }`}
+                                    style={
+                                      !level ? { backgroundColor: `${comp.color}14`, borderLeftColor: comp.color } : undefined
+                                    }
+                                  >
+                                    <span className="flex items-baseline gap-1">
+                                      <span className="truncate text-xs font-semibold" style={{ color: colorOf(entry, level) }}>
+                                        {comp.name}
+                                      </span>
+                                      {entry.week !== 'AMBAS' && (
+                                        <span className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[9px] font-medium text-white">
+                                          {entry.week}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="truncate text-[10px] text-slate-500">{entryLabel(entry)}</span>
+                                  </button>
+                                )
+                              })
+                            )}
                             <button
                               type="button"
                               title="Adicionar outro professor a este horário"
@@ -261,14 +327,17 @@ export function ScheduleGrid({
                                 e.preventDefault()
                                 handleDrop(day, slot.id, null)
                               }}
-                              onClick={() =>
-                                setTarget({ day, timeSlotId: slot.id, week, existing: null })
-                              }
-                              className={`group flex w-full items-center justify-center rounded-md border border-dashed px-2 py-1 text-slate-300 hover:border-brand-300 hover:bg-brand-50/50 ${
-                                entries.length === 0 ? 'h-14' : 'h-6'
+                              onClick={() => setTarget({ day, timeSlotId: slot.id, week, existing: null })}
+                              className={`group flex items-center justify-center border border-dashed text-slate-300 hover:border-brand-300 hover:bg-brand-50/50 ${
+                                entries.length === 0
+                                  ? 'h-10 w-full rounded-lg border-slate-200'
+                                  : 'absolute right-1 top-1 h-5 w-5 rounded-full border-slate-300 bg-white opacity-0 group-hover/cell:opacity-100 print:hidden'
                               } ${dragOverKey === dropKeyBase ? 'ring-2 ring-inset ring-brand-500' : ''}`}
                             >
-                              <Plus size={entries.length === 0 ? 14 : 11} className="opacity-0 group-hover:opacity-100 print:hidden" />
+                              <Plus
+                                size={entries.length === 0 ? 14 : 11}
+                                className={entries.length === 0 ? 'opacity-0 group-hover:opacity-100 print:hidden' : ''}
+                              />
                             </button>
                           </div>
                         </td>
@@ -279,17 +348,22 @@ export function ScheduleGrid({
                       const entryA = entries.find((e) => e.week === 'A')!
                       const entryB = entries.find((e) => e.week === 'B')!
                       return (
-                        <td key={day} className="p-1.5 align-top">
-                          <div className="flex h-16 w-full flex-col overflow-hidden rounded-lg border border-transparent print:h-auto print:min-h-[3rem]">
+                        <td key={day} className="p-[3px] align-top">
+                          <div className="flex h-[60px] w-full flex-col gap-0.5 overflow-hidden rounded-lg print:h-auto print:min-h-[3rem]">
                             {[entryA, entryB].map((entry) => {
                               const alertLevel = alertLevelFor(entry.id)
                               const component = entryDisplay(entry)
                               const dropKey = `${day}::${slot.id}::${entry.week}`
+                              const who = entryLabel(entry) ?? ''
                               return (
                                 <button
                                   key={entry.id}
                                   draggable={!editLocked}
-                                  title={alertLevel === 'labor' ? laborAlertReason(entry.id) : undefined}
+                                  title={
+                                    alertLevel === 'labor'
+                                      ? laborAlertReason(entry.id)
+                                      : `Semana ${entry.week} · ${component.name}${who ? ` · ${who}` : ''}`
+                                  }
                                   onDragStart={() => setDraggingId(entry.id)}
                                   onDragEnd={() => {
                                     setDraggingId(null)
@@ -314,37 +388,37 @@ export function ScheduleGrid({
                                       existing: entry,
                                     })
                                   }
-                                  className={`flex h-1/2 w-full cursor-grab flex-col justify-center px-2 py-0.5 text-left transition-colors first:border-b first:border-white hover:opacity-90 active:cursor-grabbing ${
+                                  className={`flex min-h-0 flex-1 w-full cursor-grab items-center gap-1.5 overflow-hidden rounded-lg border border-l-4 px-2 text-left transition-colors hover:opacity-90 active:cursor-grabbing ${
                                     alertLevel === 'conflict'
                                       ? 'border-red-400 bg-red-50'
                                       : alertLevel === 'labor'
                                         ? 'border-amber-400 bg-amber-50'
-                                        : ''
+                                        : 'border-transparent'
                                   } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
-                                  style={!alertLevel ? { backgroundColor: `${component?.color}1a` } : undefined}
+                                  style={
+                                    !alertLevel
+                                      ? { backgroundColor: `${component.color}14`, borderLeftColor: component.color }
+                                      : undefined
+                                  }
                                 >
-                                  <span className="flex items-baseline gap-1">
+                                  <span className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[9px] font-medium text-white">
+                                    {entry.week}
+                                  </span>
+                                  <span className="min-w-0 truncate text-[10px] leading-tight">
                                     <span
-                                      className="w-fit shrink-0 rounded bg-slate-700 px-1 text-[9px] font-semibold text-white"
-                                    >
-                                      {entry.week}
-                                    </span>
-                                    <span
-                                      className="truncate text-[11px] font-semibold"
+                                      className="font-semibold"
                                       style={{
                                         color:
                                           alertLevel === 'conflict'
                                             ? '#dc2626'
                                             : alertLevel === 'labor'
                                               ? '#d97706'
-                                              : component?.color,
+                                              : component.color,
                                       }}
                                     >
-                                      {component?.name}
+                                      {component.name}
                                     </span>
-                                  </span>
-                                  <span className="truncate pl-4 text-[10px] text-slate-500">
-                                    {entryLabel(entry)}
+                                    {who && <span className="text-slate-500"> · {who}</span>}
                                   </span>
                                 </button>
                               )
@@ -373,8 +447,8 @@ export function ScheduleGrid({
                           return { kind: 'empty' as const, e: null }
                         }
                         return (
-                          <td key={day} className="p-1.5 align-top">
-                            <div className="flex h-16 w-full flex-col overflow-hidden rounded-lg border border-transparent print:h-auto print:min-h-[3rem]">
+                          <td key={day} className="p-[3px] align-top">
+                            <div className="flex h-[60px] w-full flex-col gap-0.5 overflow-hidden rounded-lg print:h-auto print:min-h-[3rem]">
                               {(['A', 'B'] as const).map((w) => {
                                 const half = halfFor(w)
                                 const dropKey = `${day}::${slot.id}::${w}`
@@ -411,7 +485,7 @@ export function ScheduleGrid({
                                           existing: pe,
                                         })
                                       }
-                                      className={`flex h-1/2 w-full cursor-grab items-baseline gap-1 overflow-hidden px-2 py-0.5 text-left transition-colors first:border-b first:border-white hover:opacity-90 active:cursor-grabbing ${
+                                      className={`flex min-h-0 flex-1 w-full cursor-grab items-center gap-1 overflow-hidden rounded-lg px-2 text-left transition-colors hover:opacity-90 active:cursor-grabbing ${
                                         alertLevel === 'conflict'
                                           ? 'border-red-400 bg-red-50'
                                           : alertLevel === 'labor'
@@ -455,7 +529,7 @@ export function ScheduleGrid({
                                   return (
                                     <div
                                       key={w}
-                                      className="flex h-1/2 w-full items-baseline gap-1 overflow-hidden bg-slate-50 px-2 py-0.5 first:border-b first:border-white"
+                                      className="flex min-h-0 flex-1 w-full items-center gap-1 overflow-hidden rounded-lg bg-slate-50 px-2"
                                     >
                                       <span className="shrink-0 rounded bg-slate-300 px-1 text-[9px] font-semibold text-slate-600">
                                         Regência
@@ -492,7 +566,7 @@ export function ScheduleGrid({
                                         existing: null,
                                       })
                                     }
-                                    className={`group flex h-1/2 w-full flex-col justify-center border-dashed px-2 py-0.5 text-left first:border-b hover:bg-brand-50/50 ${
+                                    className={`group flex min-h-0 flex-1 w-full flex-col justify-center rounded-lg border border-dashed border-slate-200 px-2 text-left hover:bg-brand-50/50 ${
                                       dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''
                                     }`}
                                   >
@@ -522,13 +596,15 @@ export function ScheduleGrid({
                     const isGap = !entry && regenciaRef.length === 0 && isGapCell(day, slot.id)
 
                     return (
-                      <td key={day} className="p-1.5 align-top">
+                      <td key={day} className="p-[3px] align-top">
                         <button
                           draggable={!editLocked && !!entry}
                           title={
                             entry && alertLevel === 'labor'
                               ? laborAlertReason(entry.id)
-                              : isGap
+                              : entry
+                                ? `${component?.name} · ${label ?? ''}${entry.week !== 'AMBAS' ? ` · Semana ${entry.week}` : ''}`
+                                : isGap
                                 ? 'Horário vago entre dois compromissos deste professor no mesmo turno (limite do sindicato)'
                                 : undefined
                           }
@@ -555,7 +631,7 @@ export function ScheduleGrid({
                               existing: entry ?? null,
                             })
                           }
-                          className={`group flex h-16 w-full flex-col justify-center rounded-lg border px-2 py-1.5 text-left transition-colors print:h-auto print:min-h-[3rem] ${
+                          className={`group flex min-h-[40px] w-full flex-col justify-center rounded-lg border px-2 py-1 text-left transition-colors print:h-auto print:min-h-[3rem] ${entry && !alertLevel ? 'border-l-4' : ''} ${
                             entry ? 'cursor-grab active:cursor-grabbing' : ''
                           } ${
                             entry
@@ -572,7 +648,7 @@ export function ScheduleGrid({
                           } ${dragOverKey === dropKey ? 'ring-2 ring-inset ring-brand-500' : ''}`}
                           style={
                             entry && !alertLevel
-                              ? { backgroundColor: `${component?.color}1a` }
+                              ? { backgroundColor: `${component?.color}14`, borderLeftColor: component?.color }
                               : undefined
                           }
                         >
@@ -633,6 +709,16 @@ export function ScheduleGrid({
                     )
                   })}
                 </tr>
+                {BREAK_AFTER[slot.id] && (
+                  <tr className="print:hidden">
+                    <td
+                      colSpan={WEEKDAYS.length + 1}
+                      className="bg-slate-100 px-3 py-0.5 text-center text-[10px] font-medium uppercase tracking-widest text-slate-400"
+                    >
+                      {BREAK_AFTER[slot.id]}
+                    </td>
+                  </tr>
+                )}
               </Fragment>
             )
           })}
